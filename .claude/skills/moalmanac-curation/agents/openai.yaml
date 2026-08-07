@@ -1,0 +1,4 @@
+interface:
+  display_name: "MOAlmanac Curation"
+  short_description: "Curate FDA oncology labels with evidence and human review"
+  default_prompt: "Help me curate a pinned FDA oncology label into reviewable MOAlmanac document and indication drafts."

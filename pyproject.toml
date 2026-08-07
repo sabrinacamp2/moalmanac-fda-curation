@@ -1,0 +1,22 @@
+[project]
+name = "moalmanac-curation-agent"
+version = "0.1.0"
+description = "Evidence-backed FDA label curation tools and agent skills for MOAlmanac"
+requires-python = ">=3.11"
+dependencies = [
+  "anthropic>=0.68",
+  "markitdown[pdf]>=0.1.1",
+  "pydantic>=2.7",
+  "requests>=2.31",
+]
+
+[project.scripts]
+moalmanac-curation = "moalmanac_curation.cli:main"
+moalmanac-curation-demo = "moalmanac_curation_agent.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,2 @@
+"""MOAlmanac curation-agent prototype."""
+
