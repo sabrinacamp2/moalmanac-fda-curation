@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from moalmanac_curation.assemble_draft import assemble
+from moalmanac_fda_curation.assemble_draft import assemble
 
 
 class AssembleDraftTest(unittest.TestCase):

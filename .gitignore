@@ -1,7 +1,7 @@
 __pycache__/
 *.pyc
-.venv/
+.venv
+.venv.nosync/
 .env
 *.egg-info/
 outputs/
-data/curation.json

@@ -62,18 +62,10 @@ Do not delay the date for:
 - abbreviation expansion; or
 - reordered but clinically equivalent language.
 
-Inspect earlier similar events directly. Do not accept an LLM statement that a
-qualifier is missing without checking the event text.
-
-Known examples:
-
-- Lynparza plus bevacizumab: `2020-05-08` introduced the indication; `2020-05-19`
-  changed the heading and `HRD positive` to `HRD-positive`.
-- Keytruda first-line PD-L1-positive NSCLC: `2019-04-11` already included TPS >=1%
-  and the stage III/metastatic alternatives; `2019-06-10` reorganized the wording.
-- Jemperli single-agent dMMR endometrial cancer: `2023-02-09` introduced the full
-  indication; `2023-07-31` separated it into its own paragraph while adding another
-  combination indication.
+When a date is challenged or uncertain, inspect the relevant earlier event text
+directly. Do not accept a model statement that a qualifier is missing without checking
+the cited event. During routine review, begin with the selected event and stored
+rationale rather than asking the harness to independently repeat the full match.
 
 The changelog verifier confirms structural integrity of an LLM-selected event, not
 semantic correctness or earliest clinical equivalence.
@@ -84,3 +76,7 @@ Present generated values as proposals. Record curator edits separately from raw
 model output where practical. Never infer acceptance from silence or from a tool's
 success. Require explicit direction before changing the database or opening a PR.
 
+Record explicit curator decisions in the decision log described in
+[workflow-tools.md](workflow-tools.md). Keep full generated proposals and provenance
+in their pipeline artifacts; do not duplicate them or invent unavailable reasoning in
+the decision log.

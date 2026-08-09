@@ -1,75 +1,82 @@
-# MOAlmanac curation tools
+# MOAlmanac FDA-label curation
 
-Evidence-backed FDA oncology-label curation tools and agent skills for
-MOAlmanac collaborators. The repository is designed to run inside an existing
-agent harness such as Claude Code or Codex; it does not implement its own agent
-or require the experimental `ai-assisted-gk-curation` repository.
+Tools for turning an FDA oncology product label into reviewable
+[Molecular Oncology Almanac](https://moalmanac.org) document and indication drafts.
 
-## What is included
+The repository combines a Python pipeline with a Claude Code skill. The pipeline
+extracts and structures label evidence; Claude Code presents the results step by step
+so a curator can review, edit, or exclude each proposal.
 
-- Installable Python commands for document preparation, indication extraction,
-  description generation, Section 1 history, approval-date matching, and final
-  draft assembly
-- A project Claude Code skill under `.claude/skills/moalmanac-curation/`
-- Raw-label, source-span, changelog, and verification artifacts for curator review
-- An optional fixture-backed UI experiment retained under
-  `moalmanac_curation_agent`
+## Workflow
 
-The workflow creates draft files only. It does not modify `moalmanac-db`, commit,
-push, or open pull requests automatically.
+Given an FDA application number, the workflow can use the latest approved label to:
 
-## Install
+1. prepare document metadata;
+2. extract biomarker-relevant indications;
+3. draft descriptions from relevant label sections;
+4. track how the approved indications changed across label versions;
+5. propose initial approval dates; and
+6. assemble draft MOAlmanac JSON.
+
+Generated values remain proposals. The workflow retains source text and provenance so
+the curator can verify them before acceptance.
+
+## Setup
+
+Requirements: Python 3.11+, Claude Code, and an Anthropic API key.
 
 ```bash
-git clone REPOSITORY_URL
-cd moalmanac-curation-agent
+git clone <repository-url>
+cd moalmanac-fda-curation
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
+export ANTHROPIC_API_KEY="YOUR_API_KEY"
 ```
 
-Set `ANTHROPIC_API_KEY` before running extraction, description, or approval-date
-matching commands. Do not commit credentials. See `.env.example` for variable
-names used by the project.
+Model-backed stages use the Anthropic API and may incur usage costs. Do not commit
+API keys.
 
-## Use with Claude Code
+## Guided curation
 
-Start Claude Code from the repository root so it discovers the project skill:
+Start Claude Code from the repository root:
 
 ```bash
 claude
 ```
 
-Then ask naturally:
+Invoke the project skill:
 
 ```text
-Help me curate NDA208558 using this pinned FDA label. Show me evidence and pause
-for review before each downstream model call.
+/moalmanac-fda-curation
 ```
 
-You can also invoke `/moalmanac-curation` explicitly when it is listed by the
-harness.
+Then provide the FDA application number. The workflow selects the latest approved
+label and shows its date and URL for confirmation. A specific label URL can optionally
+be supplied to curate an earlier label version. The skill guides the curation one
+review decision at a time.
 
-## Commands
+To find the application number, search the drug or active ingredient in
+[Drugs@FDA](https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm). Open the product
+record and use its NDA or BLA number, for example `NDA208558` or `BLA761174`.
+
+## Command line
+
+The pipeline can also be run directly:
 
 ```text
-moalmanac-curation prepare-document
-moalmanac-curation extract-indications
-moalmanac-curation generate-descriptions
-moalmanac-curation build-history
-moalmanac-curation match-dates
-moalmanac-curation assemble-draft
+moalmanac-fda-curation prepare-document
+moalmanac-fda-curation extract-indications
+moalmanac-fda-curation generate-descriptions
+moalmanac-fda-curation build-history
+moalmanac-fda-curation match-dates
+moalmanac-fda-curation assemble-draft
 ```
 
-Run `moalmanac-curation <command> --help` for full arguments. Regeneration flags
-can make paid model calls, so inspect existing artifacts first.
+Run `moalmanac-fda-curation <command> --help` for command options.
 
-## Optional UI experiment
+## Current scope
 
-The earlier fixture-backed interaction prototype remains available for product
-exploration and is not required for the scripts-and-skills workflow:
-
-```bash
-moalmanac-curation-demo
-```
-
+The workflow currently creates new-entry drafts. It does not yet reconcile revised
+labels with existing MOAlmanac records, update `moalmanac-db`, or open pull requests.
+Curator review is required before using any generated content.

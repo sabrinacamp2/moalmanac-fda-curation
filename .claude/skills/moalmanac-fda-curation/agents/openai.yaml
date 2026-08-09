@@ -1,0 +1,4 @@
+interface:
+  display_name: "MOAlmanac FDA Curation"
+  short_description: "Review new FDA-label drafts with source evidence"
+  default_prompt: "Guide me through a new FDA-label curation. Use the pipeline to generate proposals, show me one concise evidence-backed review card at a time, and apply only the edits I approve."

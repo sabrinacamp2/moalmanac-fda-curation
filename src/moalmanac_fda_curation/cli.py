@@ -1,4 +1,4 @@
-"""Unified command line for the MOAlmanac curation workflow."""
+"""Unified command line for the MOAlmanac FDA-label curation workflow."""
 
 from __future__ import annotations
 
@@ -44,13 +44,13 @@ COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
 
 
 def usage() -> str:
-    lines = ["usage: moalmanac-curation <command> [options]", "", "commands:"]
+    lines = ["usage: moalmanac-fda-curation <command> [options]", "", "commands:"]
     width = max(len(command) for command in COMMANDS)
     lines.extend(
         f"  {command:<{width}}  {description}"
         for command, (description, _) in COMMANDS.items()
     )
-    lines.extend(["", "Run 'moalmanac-curation <command> --help' for command options."])
+    lines.extend(["", "Run 'moalmanac-fda-curation <command> --help' for command options."])
     return "\n".join(lines)
 
 
@@ -64,7 +64,7 @@ def main() -> int:
         print(f"Unknown command: {command}\n", file=sys.stderr)
         print(usage(), file=sys.stderr)
         return 2
-    sys.argv = [f"moalmanac-curation {command}", *sys.argv[2:]]
+    sys.argv = [f"moalmanac-fda-curation {command}", *sys.argv[2:]]
     return selected[1]()
 
 
