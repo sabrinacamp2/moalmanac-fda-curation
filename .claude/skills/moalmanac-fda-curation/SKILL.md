@@ -48,14 +48,16 @@ Use these curator-facing phases:
 5. Record each explicit decision with `record-decision`.
 6. Run `assemble-reviewed` only when all retained indications are complete.
 
-After an edit, rebuild the corresponding review file so its recorded decision and
-curator-reviewed value remain current. This rebuild is deterministic and makes no model
-call. In chat, show only the resolved edited field and value, then ask the curator to
-confirm it is correct. Do not continue until they confirm. If they correct it, record
-the replacement edit, rebuild, and confirm again.
+After an edit, rebuild the corresponding review file from existing local artifacts so
+its recorded decision and curator-reviewed value remain current. This does not resend
+label content to the workflow's configured Anthropic API. In chat, show only the resolved
+edited field and value, then ask the curator to confirm it is correct. Do not continue
+until they confirm. If they correct it, record the replacement edit, rebuild, and confirm
+again.
 
-Keep model calls batched where the existing tools support batching. Do not insert
-curator confirmation between internal pipeline stages when no review occurs there.
+Keep external workflow model requests batched where the existing tools support batching.
+Do not insert curator confirmation between internal pipeline stages when no review occurs
+there.
 
 Use the proposal's descriptive `review_label` as the heading. Keep the numeric pipeline
 index available only for tool calls and provenance.
@@ -93,7 +95,8 @@ Before submitting a meaningful shell command, explain in plain language:
 - the curation phase and why it is needed;
 - the information it will retrieve or generate;
 - whether it downloads public FDA files;
-- whether it makes paid model calls;
+- whether it sends content to the workflow's configured Anthropic API and may incur
+  additional API usage;
 - which local artifact group it will write; and
 - what the curator will review after it completes.
 

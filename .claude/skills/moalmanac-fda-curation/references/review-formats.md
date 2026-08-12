@@ -13,17 +13,20 @@ Next, I’ll prepare the document record. This collects FDA metadata about the d
 selected label, including brand and generic names, manufacturer, application number,
 label date and URLs, and citation text.
 
-This reads public FDA metadata, makes no model call, and writes a local proposal only.
+This retrieves public FDA metadata and writes a local proposal. It does not send label
+content to the workflow's configured Anthropic API.
 Afterward, you’ll review `document.md`, especially editorial fields such as company.
 ```
 
 For indication extraction, state that the command downloads the selected label, reads
-Indications and Usage, makes a paid model call, and produces candidates for selection.
+Indications and Usage, sends that text to the workflow's configured Anthropic API, and
+produces candidates for selection. This may incur additional API usage.
 
 For the post-selection preparation phase, state that the commands generate descriptions,
-download historical labels, propose initial approval dates, make paid model calls, and
-prepare review files for only the selected candidates. Explain once before the uninterrupted
-phase rather than once per internal step.
+download historical labels, propose initial approval dates, send relevant source text
+to the workflow's configured Anthropic API, and prepare review files for only the selected
+candidates. Explain once before the uninterrupted phase rather than once per internal
+step.
 
 ## Document review in chat
 

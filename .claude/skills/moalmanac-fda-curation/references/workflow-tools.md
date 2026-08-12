@@ -12,8 +12,8 @@ moalmanac-fda-curation --help
 
 Always inspect and reuse `.venv` before creating an environment. `doctor` reports the
 virtual-environment state and checks installation, key presence, FDA connectivity, and
-output permissions. It never creates an environment, prints the key, or makes a paid
-model call.
+output permissions. It never creates an environment, prints the key, or sends content
+to the workflow's configured Anthropic API.
 
 ## Artifact ownership
 

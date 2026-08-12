@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Rebuild history and date matches; may repeat model calls.",
+        help="Rebuild history and date matches; may repeat Anthropic API requests.",
     )
     return parser.parse_args()
 

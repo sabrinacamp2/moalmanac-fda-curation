@@ -280,7 +280,7 @@ def document_markdown(packet: dict[str, Any]) -> str:
         f"- FDA application identification number: {target.get('identification_number')}",
         f"- Selected label date: {target.get('selected_label_date')}",
         "",
-        "## Pipeline proposal — model-free generated document.json",
+        "## Pipeline proposal — generated locally from FDA metadata",
         "",
         "FDA URL fields remain in the generated JSON but are omitted from this review view.",
         "",
