@@ -4,13 +4,14 @@ An agent-assisted workflow for turning FDA oncology product labels into reviewed
 [Molecular Oncology Almanac](https://moalmanac.org) document and indication JSON.
 
 The pipeline retrieves label evidence and generates structured proposals. A reusable
-skill lets Claude Code or Codex guide the curator through source-linked review, edits,
+skill lets Claude or Codex guide the curator through source-linked review, edits,
 exclusions, and final assembly.
 
 ## Install
 
-Requirements: Python 3.11+, an Anthropic API key, and either
-[Claude Code](https://code.claude.com/docs) or [Codex](https://developers.openai.com/codex/).
+Requirements: Python 3.11+, an Anthropic API key, and either the
+[Claude](https://code.claude.com/docs) or [ChatGPT](https://developers.openai.com/codex/)
+desktop app.
 
 ```shell
 git clone https://github.com/sabrinacamp2/moalmanac-fda-curation.git
@@ -24,15 +25,16 @@ moalmanac-fda-curation doctor
 
 Do not commit API keys.
 
-## Curate with Claude Code
+## Recommended experience
 
-Start Claude Code from the repository root:
+We recommend using the Claude or ChatGPT desktop app. Their conversational interface and
+file previews make it easier to move through the review, open generated Markdown, inspect
+source evidence, and ask questions without losing your place.
 
-```shell
-claude
-```
+## Curate with Claude
 
-Then invoke the project skill:
+Open the cloned repository in the Claude desktop app's Code tab, then invoke the project
+skill:
 
 ```text
 /moalmanac-fda-curation
@@ -43,9 +45,9 @@ approved label, explains each phase, and links the generated review files. You c
 questions, inspect local source evidence, edit proposals, exclude indications, and accept
 the final reviewed output.
 
-## Curate with Codex
+## Curate with ChatGPT
 
-Open the cloned repository in Codex and ask:
+Open the cloned repository in Codex in the ChatGPT desktop app and ask:
 
 ```text
 Use the MOAlmanac FDA curation skill at
