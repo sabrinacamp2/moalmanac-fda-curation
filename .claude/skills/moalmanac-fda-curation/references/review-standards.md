@@ -3,18 +3,19 @@
 ## Source and extraction quality
 
 Require substantive raw text for every proposal. A model must not reconstruct an
-indication from headings, drug knowledge, or other labels. Compare extracted Section
-1 against obvious label structure and flag suspiciously short or fragmented text.
+indication from headings, drug knowledge, or other labels. Compare the extracted
+Indications and Usage section against obvious label structure and flag suspiciously
+short or fragmented text.
 
 Known unsafe patterns include:
 
 - symbol-only PDF conversion;
-- Section 1 chunks containing later-section headings but no indication body;
+- Indications and Usage chunks containing later-section headings but no indication body;
 - generated details absent from `source_chunk_text`; and
 - a converted label whose section boundaries jump unexpectedly.
 
-If the pinned PDF cannot be extracted, skip or flag the candidate. Do not silently
-use openFDA text because its content may not correspond to the pinned label date.
+If the selected PDF cannot be extracted, skip or flag the candidate. Do not silently
+use openFDA text because its content may not correspond to the selected label date.
 
 ## Indication review
 
@@ -72,9 +73,9 @@ semantic correctness or earliest clinical equivalence.
 
 ## Review and publication authority
 
-Present generated values as proposals. Record curator edits separately from raw
-model output where practical. Never infer acceptance from silence or from a tool's
-success. Require explicit direction before changing the database or opening a PR.
+Present generated values as proposals. Always record curator edits separately from
+generated output. Never infer acceptance from silence or from a tool's success.
+Require explicit direction before changing the database or opening a PR.
 
 Record explicit curator decisions in the decision log described in
 [workflow-tools.md](workflow-tools.md). Keep full generated proposals and provenance

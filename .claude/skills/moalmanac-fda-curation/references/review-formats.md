@@ -1,105 +1,127 @@
-# Step-by-step review formats
+# File-first curator review
 
-Use these compact cards in chat. Show one indication at a time unless the curator asks
-for a summary. Link the full artifact and quote only enough evidence to make the
-decision understandable.
+The `review-packet` tool generates canonical Markdown review files. Do not copy their
+contents into chat. Link to the relevant file, add a clearly labeled harness assessment,
+and ask for a decision.
 
-## Document proposal
+## Before a command
 
-```text
-Document proposal
+Immediately before submitting a shell command, send a short preview:
 
-Brand (generic): <value>
-Company: <value>
-Application: <value>
-Pinned label date: <value>
-Pinned label: <URL>
-Citation: <value>
+```markdown
+Next, I’ll prepare the document record. This collects FDA metadata about the drug and
+selected label, including brand and generic names, manufacturer, application number,
+label date and URLs, and citation text.
 
-Review note: <pipeline warning or editorial field needing attention>
-Decision: accept, edit a field, inspect the source, or ask a question.
+This reads public FDA metadata, makes no model call, and writes a local proposal only.
+Afterward, you’ll review `document.md`, especially editorial fields such as company.
 ```
 
-Do not claim to show an original FDA sponsor value separately unless the artifact or
-command output preserves it.
+For indication extraction, state that the command downloads the selected label, reads
+Indications and Usage, makes a paid model call, and produces candidates for selection.
 
-## Indication proposal
+For the post-selection preparation phase, state that the commands generate descriptions,
+download historical labels, propose initial approval dates, make paid model calls, and
+prepare review files for only the selected candidates. Explain once before the uninterrupted
+phase rather than once per internal step.
 
-```text
-Indication <pipeline index>
+## Document review in chat
 
-Proposal:
-> <indication>
+```markdown
+[Open the document review](<absolute-path-to-review/document.md>)
 
-Structured fields:
-- Biomarker: <raw_biomarkers or null>
-- Cancer type: <raw_cancer_type or null>
-- Therapeutics: <raw_therapeutics or null>
+**Harness assessment:** <Only the harness’s judgment about fields needing attention.>
 
-Supporting Section 1 source:
-> <short relevant excerpt from the linked broad source chunk>
-
-Warnings: <specific discrepancy or none observed>
-Decision: accept, edit, exclude, inspect more source, or ask a question.
+1. Accept
+2. Edit a field
+3. Inspect source metadata
+4. Ask a question
 ```
 
-Do not silently produce a replacement extraction. If a discrepancy is visible, name
-it and ask for a decision.
+The linked file contains FDA target metadata and the exact generated document proposal.
+It does not yet link local label files; those are created during indication extraction.
 
-## Description proposal
+## Candidate selection in chat
 
-```text
-Description for indication <pipeline index>
+```markdown
+[Open the extracted indication candidates](<absolute-path-to-review/indication-candidates.md>)
 
-Proposal:
-> <description>
+**Harness assessment:** <Identify likely borderline candidates or extraction concerns;
+do not restate the candidates.>
 
-Selected Clinical Studies evidence:
-> <short excerpt, or "No span selected">
-
-Review focus: Does the added detail clarify an ambiguity in this indication?
-Warnings: <different disease/biomarker/regimen, unsupported detail, or none observed>
-Decision: accept, edit, use indication-only wording, inspect more source, or ask a
-question.
+Tell me which candidates should continue, which should be excluded, or what you want to
+investigate.
 ```
 
-Do not independently choose a replacement span during normal review. If the selected
-span appears wrong, flag the mismatch and offer to inspect or regenerate it.
+The linked file is intentionally a quick genomic-biomarker relevance screen: each
+candidate shows only its descriptive name, proposed indication, and raw biomarker.
+Detailed source scrutiny happens during the one-by-one indication review. Do not run
+descriptions or approval matching until the candidate set is explicit.
 
-## Approval-date proposal
+## Indication review in chat
 
-```text
-Initial approval proposal for indication <pipeline index>
+```markdown
+[Open the indication review](<absolute-path-to-review/indications/<slug>/indication.md>)
 
-Date: <date or unmatched>
-Event: <number and change type>
-Label: <URL>
-Pipeline rationale: <stored rationale>
+**Harness assessment:** <Assess source support and preserved qualifiers without copying
+the proposal or source into chat.>
 
-Before:
-> <stored before text or none>
-
-After:
-> <stored after text>
-
-Verification: <passed/failed and any uncertainty>
-Decision: accept, inspect earlier events, choose another event, or ask a question.
+1. Accept
+2. Edit
+3. Exclude
+4. Inspect more evidence
+5. Ask a question
 ```
 
-Do not independently rank the full timeline unless requested or investigating a
-specific warning. Verification is structural, not proof of earliest clinical
-equivalence.
+## Description review in chat
 
-## Final draft
+```markdown
+[Open the description review](<absolute-path-to-review/indications/<slug>/description.md>)
 
-```text
-Draft ready for final review
+**Harness assessment:** <State whether Clinical Studies detail genuinely clarifies the
+indication and whether the cited span supports it.>
 
-- Document: <artifact link>
-- Indications included: <indexes/count>
-- Excluded candidates: <indexes/count>
-- Unresolved decisions: <items or none>
-- Structural validation: <result>
-
-This is a draft only; it has not been merged into moalmanac-db.
+1. Accept
+2. Edit
+3. Use indication-only wording
+4. Inspect more evidence
+5. Ask a question
 ```
+
+## Approval review in chat
+
+```markdown
+[Open the initial approval review](<absolute-path-to-review/indications/<slug>/approval.md>)
+
+**Harness assessment:** <Assess the selected event and flag uncertainty without copying
+the indication, rationale, or changelog text into chat.>
+
+1. Accept
+2. Inspect earlier events
+3. Choose another event
+4. Ask a question
+```
+
+The approval file repeats the current curator-reviewed indication before the date
+evidence so the curator can judge clinical equivalence without changing context. Its
+before/after evidence is copied directly from the selected changelog event, and it links
+to that numbered event in the full local changelog.
+
+## Confirm an edit
+
+After recording an edit, rebuild the deterministic review file. In chat, show only the
+resolved field and value, then ask the curator to confirm it. Do not copy the rest of the
+packet into chat and do not move to the next review until the curator confirms.
+
+## Trust labels inside deterministic files
+
+Review files must visibly distinguish:
+
+- **FDA source — verbatim**;
+- **Pipeline proposal — model generated**;
+- **FDA source — verbatim, span selected by pipeline model**;
+- **Pipeline selection — event selected by model**;
+- **Deterministically retrieved event evidence**; and
+- **Recorded curator decision**.
+
+No harness assessment belongs inside these deterministic files.

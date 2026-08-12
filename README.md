@@ -28,10 +28,11 @@ Requirements: Python 3.11+, Claude Code, and an Anthropic API key.
 ```bash
 git clone <repository-url>
 cd moalmanac-fda-curation
-python -m venv .venv
+test -d .venv || python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
 export ANTHROPIC_API_KEY="YOUR_API_KEY"
+moalmanac-fda-curation doctor
 ```
 
 Model-backed stages use the Anthropic API and may incur usage costs. Do not commit
@@ -67,10 +68,10 @@ The pipeline can also be run directly:
 ```text
 moalmanac-fda-curation prepare-document
 moalmanac-fda-curation extract-indications
-moalmanac-fda-curation generate-descriptions
-moalmanac-fda-curation build-history
-moalmanac-fda-curation match-dates
-moalmanac-fda-curation assemble-draft
+moalmanac-fda-curation prepare-selected-review
+moalmanac-fda-curation review-packet
+moalmanac-fda-curation record-decision
+moalmanac-fda-curation assemble-reviewed
 ```
 
 Run `moalmanac-fda-curation <command> --help` for command options.

@@ -312,10 +312,15 @@ Use only the provided text.
 
 For each indication, return:
 - indication: a complete, standalone indication sentence.
+- review_label: a concise display label of at most 8 words that distinguishes this
+  indication during curator review. Prefer disease, biomarker, treatment setting, and
+  a meaningful prior-treatment qualifier; do not include the drug name.
 - raw_biomarkers: biomarker, molecular feature, expression status, mutation, genomic exclusion, or test-defined status directly used to select patients. Use null if none is present.
 - raw_cancer_type: the disease or cancer type phrase from the indication.
 - raw_therapeutics: the therapy or therapy combination phrase from the indication.
   In this field only, write the label drug as "{brand_name} ({generic_name})".
+- highlights_drug_class_used: true only if the indication sentence uses the supplied
+  Highlights drug-class phrase; otherwise false.
 
 Rules:
 - Preserve label wording as closely as possible.
@@ -367,9 +372,11 @@ def call_claude_for_indication_fields(
 
     class ChunkIndication(BaseModel):
         indication: str
+        review_label: str
         raw_biomarkers: str | None = None
         raw_cancer_type: str | None = None
         raw_therapeutics: str | None = None
+        highlights_drug_class_used: bool = False
 
     class ChunkIndicationResponse(BaseModel):
         indications: list[ChunkIndication]
@@ -459,9 +466,8 @@ def extract_indications_from_label_url(
     write_text(md_path, label_markdown, overwrite=overwrite)
 
     raw_indications = extract_indications_section(label_markdown)
-    highlights = extract_highlights_drug_class(
-        extract_highlights_section(label_markdown)
-    )
+    highlights_section = extract_highlights_section(label_markdown)
+    highlights = extract_highlights_drug_class(highlights_section)
     write_text(
         raw_indications_path, raw_indications.rstrip() + "\n", overwrite=overwrite
     )
@@ -511,6 +517,11 @@ def extract_indications_from_label_url(
         completed_source_chunk_indexes=completed_source_chunk_indexes,
         checkpoint=lambda payload: write_json_atomic(checkpoint_path, payload),
     )
+    claude_indications["provenance"] = {
+        "indications_and_usage_section": "Full Prescribing Information — Indications and Usage",
+        "highlights_indications_and_usage_text": highlights_section,
+        "highlights_drug_class_phrase": highlights,
+    }
     write_json_atomic(claude_path, claude_indications)
     checkpoint_path.unlink(missing_ok=True)
 

@@ -187,11 +187,6 @@ def section_1_snapshots(
     drug_labels_dir = historical_labels_dir / stem
     cache_path = cache_dir / f"{stem}-section1-cache.json"
     cache = load_cache(cache_path)
-    legacy_cache_path = cache_dir / f"{stem}-section1-changelog-cache.json"
-    if legacy_cache_path.exists():
-        cache = {**load_cache(legacy_cache_path), **cache}
-        if not cache_path.exists():
-            save_cache(cache_path, cache)
     snapshots = []
     skipped_labels = []
 

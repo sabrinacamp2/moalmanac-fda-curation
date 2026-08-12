@@ -594,6 +594,14 @@ Requirements for the description field:
 - Do not invent trial names, biomarkers, dates, or regulatory details.
 - Do not mention source line numbers or provenance metadata in the description.
 
+Also return review metadata:
+- clinical_detail_used: true only when the description adds information from Clinical
+  Studies beyond a direct reformulation of the indication.
+- clinical_detail_text: the exact added sentence or phrase, or null when no Clinical
+  Studies detail was used.
+- clinical_detail_purpose: one concise sentence explaining which ambiguity the added
+  detail resolves, or null when no Clinical Studies detail was used.
+
 Structured input:
 {json.dumps(prompt_input, indent=2)}
 """.strip()
@@ -612,7 +620,7 @@ def call_claude_for_description(
     prompt: str,
     model: str,
     max_tokens: int,
-) -> str:
+) -> dict[str, Any]:
     """Call Claude for one structured description draft."""
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError(
@@ -629,6 +637,9 @@ def call_claude_for_description(
 
     class DescriptionDraft(BaseModel):
         description: str
+        clinical_detail_used: bool = False
+        clinical_detail_text: str | None = None
+        clinical_detail_purpose: str | None = None
 
     client = Anthropic()
     response = client.messages.parse(
@@ -640,7 +651,7 @@ def call_claude_for_description(
     )
 
     parsed = pydantic_to_dict(response.parsed_output)
-    return parsed["description"]
+    return parsed
 
 
 def selected_indication_indexes(
@@ -728,7 +739,7 @@ def build_description_candidates(
             description_input,
             max_supporting_section_chars=args.max_supporting_section_chars,
         )
-        description = call_claude_for_description(
+        description_result = call_claude_for_description(
             prompt=prompt,
             model=args.model,
             max_tokens=args.max_tokens,
@@ -739,7 +750,10 @@ def build_description_candidates(
                 "indication_index": indication_index,
                 "source_chunk_index": indication.get("source_chunk_index"),
                 "indication": indication["indication"],
-                "description": description,
+                "description": description_result["description"],
+                "clinical_detail_used": description_result.get("clinical_detail_used", False),
+                "clinical_detail_text": description_result.get("clinical_detail_text"),
+                "clinical_detail_purpose": description_result.get("clinical_detail_purpose"),
                 "supporting_sections_included": included_sections,
                 "supporting_sections_omitted": omitted_sections,
                 "supporting_label_section_selections": (

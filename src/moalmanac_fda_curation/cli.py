@@ -6,22 +6,31 @@ import sys
 from collections.abc import Callable
 
 from . import (
-    assemble_draft,
+    assemble_reviewed,
     build_section1_changelogs,
     curate_doc_from_drugsfda_endpoint,
+    doctor,
     extract_indication_descriptions,
     extract_indications_from_fda_label,
     match_indication_approval_dates_from_changelog,
+    prepare_approval_evidence,
+    prepare_selected_review,
+    review_packet,
+    review_state,
 )
 
 
 COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
+    "doctor": (
+        "Check installation, API-key presence, FDA access, and output permissions",
+        doctor.main,
+    ),
     "prepare-document": (
         "Create a document proposal from Drugs@FDA metadata",
         curate_doc_from_drugsfda_endpoint.main,
     ),
     "extract-indications": (
-        "Extract indication proposals and source evidence from a pinned label",
+        "Extract indication proposals and source evidence from the selected label",
         extract_indications_from_fda_label.main,
     ),
     "generate-descriptions": (
@@ -29,16 +38,32 @@ COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
         extract_indication_descriptions.main,
     ),
     "build-history": (
-        "Build the historical Section 1 changelog",
+        "Build the historical Indications and Usage changelog (diagnostic)",
         build_section1_changelogs.main,
     ),
     "match-dates": (
         "Match indications to initial approval events",
         match_indication_approval_dates_from_changelog.main,
     ),
-    "assemble-draft": (
-        "Validate and assemble final indication JSON",
-        assemble_draft.main,
+    "prepare-approval-evidence": (
+        "Build/reuse label history and prepare approval evidence in one step",
+        prepare_approval_evidence.main,
+    ),
+    "prepare-selected-review": (
+        "Prepare descriptions, approval evidence, and review files for selected indications",
+        prepare_selected_review.main,
+    ),
+    "review-packet": (
+        "Create a compact evidence packet for one indication",
+        review_packet.main,
+    ),
+    "record-decision": (
+        "Record an explicit curator decision without editing generated artifacts",
+        review_state.main,
+    ),
+    "assemble-reviewed": (
+        "Apply explicit decisions and write reviewed document.json and indication.json",
+        assemble_reviewed.main,
     ),
 }
 

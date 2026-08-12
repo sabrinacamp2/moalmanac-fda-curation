@@ -2,7 +2,7 @@
 
 Use these examples to recognize the current referenced JSON shape and common editorial
 patterns. They are copied from the sibling `moalmanac-db` checkout as examples, not as
-ground truth for another curation. Always derive target values from the pinned label
+ground truth for another curation. Always derive target values from the selected label
 and workflow evidence. When `moalmanac-db` is available, inspect its current files
 because the schema and editorial conventions can change.
 
