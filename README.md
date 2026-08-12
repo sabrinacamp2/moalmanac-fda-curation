@@ -1,7 +1,7 @@
 # MOAlmanac FDA Curation Assistant
 
-An agent-assisted workflow for turning FDA oncology product labels into reviewed
-[Molecular Oncology Almanac](https://moalmanac.org) document and indication JSON.
+An agentic, human-in-the-loop workflow for evidence-backed FDA label curation for the
+[Molecular Oncology Almanac](https://moalmanac.org).
 
 The pipeline retrieves label evidence and generates structured proposals. A reusable
 skill lets Claude or Codex guide the curator through source-linked review, edits,
