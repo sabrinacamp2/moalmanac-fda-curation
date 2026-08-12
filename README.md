@@ -7,20 +7,16 @@ The pipeline retrieves label evidence and generates structured proposals. A reus
 skill lets Claude or Codex guide the curator through source-linked review, edits,
 exclusions, and final assembly.
 
-## Install
+## Get started
 
-Requirements: Python 3.11+, an Anthropic API key, and either the
+You need Python 3.11+, an Anthropic API key, and either the
 [Claude](https://code.claude.com/docs) or [ChatGPT](https://developers.openai.com/codex/)
-desktop app.
+desktop app. Clone the repository, open its folder in the desktop app, and invoke the
+curation skill. The agent will inspect the environment and guide you through any needed
+setup.
 
 ```shell
 git clone https://github.com/sabrinacamp2/moalmanac-fda-curation.git
-cd moalmanac-fda-curation
-test -d .venv || python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-export ANTHROPIC_API_KEY="YOUR_API_KEY"
-moalmanac-fda-curation doctor
 ```
 
 Do not commit API keys.
@@ -63,6 +59,11 @@ record and use its NDA or BLA number, for example `NDA208558` or `BLA761174`.
 
 Completed runs write `reviewed/document.json` and `reviewed/indication.json`. Generated
 proposals remain separate from explicitly accepted curator decisions.
+
+## Manual setup and troubleshooting
+
+If guided setup does not complete successfully, see the
+[workflow commands and environment checks](.claude/skills/moalmanac-fda-curation/references/workflow-tools.md#setup).
 
 ## Repository structure
 
