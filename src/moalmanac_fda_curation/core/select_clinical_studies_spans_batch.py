@@ -27,7 +27,7 @@ from .extract_indication_descriptions import (
     numbered_lines,
     pydantic_to_dict,
 )
-from .workflow_artifacts import (
+from .artifacts import (
     file_sha256,
     load_document_artifact,
     write_json_atomic,

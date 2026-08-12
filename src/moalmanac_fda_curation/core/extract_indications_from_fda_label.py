@@ -44,7 +44,7 @@ import requests
 DEFAULT_MODEL = "claude-sonnet-4-5"
 DEFAULT_MAX_TOKENS = 4096
 
-from .workflow_artifacts import (
+from .artifacts import (
     document_label_url,
     load_document_artifact,
     load_json_object,

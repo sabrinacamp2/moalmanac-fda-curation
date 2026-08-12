@@ -8,8 +8,8 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from .curate_doc_from_drugsfda_endpoint import curate_document
-from .workflow_artifacts import write_json_atomic
+from ..core.curate_doc_from_drugsfda_endpoint import curate_document
+from ..core.artifacts import write_json_atomic
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,7 +39,7 @@ def main() -> int:
         [
             sys.executable,
             "-m",
-            "moalmanac_fda_curation.review_packet",
+            "moalmanac_fda_curation.review.packets",
             "--stage",
             "document",
             "--document-json",

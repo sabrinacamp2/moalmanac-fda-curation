@@ -40,7 +40,7 @@ DEFAULT_CLINICAL_STUDIES_SELECTOR_MAX_TOKENS = 2000
 DEFAULT_MAX_SUPPORTING_SECTION_CHARS = 60000
 DEFAULT_AGENCY_NAME = "The U.S. Food and Drug Administration"
 
-from .workflow_artifacts import (
+from .artifacts import (
     file_sha256,
     load_document_artifact,
     load_json_object,

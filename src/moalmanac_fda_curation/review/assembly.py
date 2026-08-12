@@ -8,8 +8,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .review_state import load_decisions, verify_decision_sources
-from .workflow_artifacts import load_document_artifact, load_json_object, write_json_atomic
+from .decisions import load_decisions, verify_decision_sources
+from ..core.artifacts import load_document_artifact, load_json_object, write_json_atomic
 
 
 def load_json_list(path: Path, name: str) -> list[dict[str, Any]]:

@@ -31,7 +31,7 @@ DEFAULT_MODEL = "claude-sonnet-4-5"
 DEFAULT_MAX_TOKENS = 8000
 
 from .build_section1_changelogs import build_section1_changelog_markdown
-from .workflow_artifacts import (
+from .artifacts import (
     file_sha256,
     load_json_object as load_workflow_json_object,
     partial_output_path,

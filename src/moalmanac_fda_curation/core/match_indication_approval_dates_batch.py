@@ -30,7 +30,7 @@ from .match_indication_approval_dates_from_changelog import (
     target_fields_block,
     verify_llm_changelog_match,
 )
-from .workflow_artifacts import file_sha256, write_json_atomic
+from .artifacts import file_sha256, write_json_atomic
 
 DEFAULT_MODEL = "claude-sonnet-4-5"
 DEFAULT_MAX_TOKENS = 8000

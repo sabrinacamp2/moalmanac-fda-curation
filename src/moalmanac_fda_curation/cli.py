@@ -5,14 +5,9 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 
-from . import (
-    assemble_reviewed,
-    doctor,
-    extract_indication_candidates,
-    prepare_document_review,
-    prepare_selected_review,
-    review_state,
-)
+from . import doctor
+from .review import assembly, decisions
+from .workflows import extract_candidates, prepare_document, prepare_selected
 
 
 COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
@@ -22,23 +17,23 @@ COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
     ),
     "prepare-document-review": (
         "Prepare FDA document metadata and its curator review",
-        prepare_document_review.main,
+        prepare_document.main,
     ),
     "extract-indication-candidates": (
         "Extract indication candidates and create their screening review",
-        extract_indication_candidates.main,
+        extract_candidates.main,
     ),
     "prepare-selected-review": (
         "Prepare descriptions, approval evidence, and review files for selected indications",
-        prepare_selected_review.main,
+        prepare_selected.main,
     ),
     "record-decision": (
         "Record a curator decision and refresh its review file",
-        review_state.main,
+        decisions.main,
     ),
     "assemble-reviewed": (
         "Apply explicit decisions and write reviewed document.json and indication.json",
-        assemble_reviewed.main,
+        assembly.main,
     ),
 }
 

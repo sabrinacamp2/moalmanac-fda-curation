@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .workflow_artifacts import file_sha256, load_json_object, write_json_atomic
+from ..core.artifacts import file_sha256, load_json_object, write_json_atomic
 
 VALID_STAGES = {"document", "indication", "description", "approval"}
 VALID_DECISIONS = {"accepted", "edited", "excluded", "unresolved"}
@@ -249,7 +249,7 @@ def main() -> int:
     rebuild = [
         sys.executable,
         "-m",
-        "moalmanac_fda_curation.review_packet",
+        "moalmanac_fda_curation.review.packets",
         "--stage",
         args.stage,
         *review_command,

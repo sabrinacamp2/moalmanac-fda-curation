@@ -7,8 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .extract_indications_from_fda_label import DEFAULT_MAX_TOKENS, DEFAULT_MODEL, output_stem
-from .workflow_artifacts import load_document_artifact, resolve_document_application_number
+from ..core.extract_indications_from_fda_label import DEFAULT_MAX_TOKENS, DEFAULT_MODEL, output_stem
+from ..core.artifacts import load_document_artifact, resolve_document_application_number
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,7 +35,7 @@ def main() -> int:
     extraction = [
         sys.executable,
         "-m",
-        "moalmanac_fda_curation.extract_indications_from_fda_label",
+        "moalmanac_fda_curation.core.extract_indications_from_fda_label",
         "--document-json",
         str(document_path),
         "--output-dir",
@@ -52,7 +52,7 @@ def main() -> int:
         [
             sys.executable,
             "-m",
-            "moalmanac_fda_curation.review_packet",
+            "moalmanac_fda_curation.review.packets",
             "--stage",
             "candidates",
             "--document-json",

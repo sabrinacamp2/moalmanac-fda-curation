@@ -7,9 +7,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .extract_indication_descriptions import DEFAULT_MAX_TOKENS, DEFAULT_MODEL
-from .build_section1_changelogs import output_stem
-from .workflow_artifacts import load_document_artifact, resolve_document_application_number
+from ..core.extract_indication_descriptions import DEFAULT_MAX_TOKENS, DEFAULT_MODEL
+from ..core.build_section1_changelogs import output_stem
+from ..core.artifacts import load_document_artifact, resolve_document_application_number
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,7 +75,7 @@ def main() -> int:
         command = [
             sys.executable,
             "-m",
-            "moalmanac_fda_curation.extract_indication_descriptions",
+            "moalmanac_fda_curation.core.extract_indication_descriptions",
             "--document-json",
             str(document),
             "--indication-fields-json",
@@ -97,7 +97,7 @@ def main() -> int:
     approval_command = [
         sys.executable,
         "-m",
-        "moalmanac_fda_curation.prepare_approval_evidence",
+        "moalmanac_fda_curation.workflows.prepare_approval",
         "--document-json",
         str(document),
         "--indication-fields-json",
@@ -121,7 +121,7 @@ def main() -> int:
             command = [
                 sys.executable,
                 "-m",
-                "moalmanac_fda_curation.review_packet",
+                "moalmanac_fda_curation.review.packets",
                 "--stage",
                 stage,
                 "--document-json",

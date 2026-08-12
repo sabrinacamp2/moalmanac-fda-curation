@@ -6,13 +6,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from moalmanac_fda_curation.assemble_reviewed import assemble_reviewed
-from moalmanac_fda_curation import (
-    extract_indication_candidates,
-    prepare_document_review,
-    review_state,
-)
-from moalmanac_fda_curation.review_packet import (
+from moalmanac_fda_curation.review.assembly import assemble_reviewed
+from moalmanac_fda_curation.review import decisions as decision_module
+from moalmanac_fda_curation.review.packets import (
     approval_markdown,
     build_stage_packet,
     candidates_markdown,
@@ -21,12 +17,13 @@ from moalmanac_fda_curation.review_packet import (
     indication_markdown,
 )
 from moalmanac_fda_curation.doctor import virtual_environment_status
-from moalmanac_fda_curation.review_state import (
+from moalmanac_fda_curation.review.decisions import (
     decision_sources,
     empty_decisions,
     record_decision,
     verify_decision_sources,
 )
+from moalmanac_fda_curation.workflows import extract_candidates, prepare_document
 
 
 class ReviewWorkflowTest(unittest.TestCase):
@@ -251,18 +248,18 @@ class ReviewWorkflowTest(unittest.TestCase):
                 str(work_dir),
             ]
             with patch("sys.argv", argv), patch.object(
-                prepare_document_review, "curate_document", return_value=self.document
-            ), patch.object(prepare_document_review.subprocess, "run") as run:
-                self.assertEqual(prepare_document_review.main(), 0)
+                prepare_document, "curate_document", return_value=self.document
+            ), patch.object(prepare_document.subprocess, "run") as run:
+                self.assertEqual(prepare_document.main(), 0)
 
             proposal = work_dir / "intermediate" / "document.proposal.json"
             self.assertTrue(proposal.is_file())
             command = run.call_args.args[0]
-            self.assertIn("moalmanac_fda_curation.review_packet", command)
+            self.assertIn("moalmanac_fda_curation.review.packets", command)
             self.assertIn(str(proposal.resolve()), command)
 
     def test_review_inputs_derive_stage_artifacts_from_work_dir(self) -> None:
-        from moalmanac_fda_curation.review_state import review_inputs
+        from moalmanac_fda_curation.review.decisions import review_inputs
 
         with tempfile.TemporaryDirectory() as temp_dir:
             work_dir = Path(temp_dir)
@@ -301,19 +298,19 @@ class ReviewWorkflowTest(unittest.TestCase):
             document.write_text(json.dumps(self.document), encoding="utf-8")
             argv = ["extract-indication-candidates", "--work-dir", str(work_dir)]
             with patch("sys.argv", argv), patch.object(
-                extract_indication_candidates.subprocess, "run"
+                extract_candidates.subprocess, "run"
             ) as run, patch.object(
-                extract_indication_candidates,
+                extract_candidates,
                 "resolve_document_application_number",
                 return_value="NDA123456",
             ):
-                self.assertEqual(extract_indication_candidates.main(), 0)
+                self.assertEqual(extract_candidates.main(), 0)
 
             self.assertEqual(run.call_count, 2)
             extraction_command = run.call_args_list[0].args[0]
             review_command = run.call_args_list[1].args[0]
-            self.assertIn("moalmanac_fda_curation.extract_indications_from_fda_label", extraction_command)
-            self.assertIn("moalmanac_fda_curation.review_packet", review_command)
+            self.assertIn("moalmanac_fda_curation.core.extract_indications_from_fda_label", extraction_command)
+            self.assertIn("moalmanac_fda_curation.review.packets", review_command)
             self.assertIn("--stage", review_command)
             self.assertIn("candidates", review_command)
 
@@ -333,16 +330,16 @@ class ReviewWorkflowTest(unittest.TestCase):
                 "accepted",
             ]
             with patch("sys.argv", argv), patch.object(
-                review_state.subprocess, "run"
+                decision_module.subprocess, "run"
             ) as run:
-                self.assertEqual(review_state.main(), 0)
+                self.assertEqual(decision_module.main(), 0)
 
             decisions = json.loads(
                 (work_dir / "review" / "decisions.json").read_text(encoding="utf-8")
             )
             self.assertEqual(decisions["document"]["decision"], "accepted")
             command = run.call_args.args[0]
-            self.assertIn("moalmanac_fda_curation.review_packet", command)
+            self.assertIn("moalmanac_fda_curation.review.packets", command)
             self.assertIn("--decisions-json", command)
 
     def test_generated_sources_remain_unchanged_and_reviewed_output_applies_override(self) -> None:

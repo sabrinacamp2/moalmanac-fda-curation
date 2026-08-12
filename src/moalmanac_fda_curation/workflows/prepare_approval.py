@@ -6,12 +6,12 @@ import argparse
 import json
 from pathlib import Path
 
-from .build_section1_changelogs import (
+from ..core.build_section1_changelogs import (
     build_changelog,
     build_section1_changelog_markdown,
     output_stem,
 )
-from .match_indication_approval_dates_from_changelog import (
+from ..core.match_indication_approval_dates_from_changelog import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
     build_changelog_approval_date_matches,
@@ -19,7 +19,7 @@ from .match_indication_approval_dates_from_changelog import (
     load_chunked_indication_fields,
     selected_indication_indexes,
 )
-from .workflow_artifacts import (
+from ..core.artifacts import (
     document_label_url,
     load_document_artifact,
     resolve_document_application_number,

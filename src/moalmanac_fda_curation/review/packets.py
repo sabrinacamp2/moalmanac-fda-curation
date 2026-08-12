@@ -9,8 +9,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .review_state import load_decisions
-from .workflow_artifacts import load_document_artifact, load_json_object, write_json_atomic
+from .decisions import load_decisions
+from ..core.artifacts import load_document_artifact, load_json_object, write_json_atomic
 
 STAGES = ("document", "candidates", "indication", "description", "approval")
 

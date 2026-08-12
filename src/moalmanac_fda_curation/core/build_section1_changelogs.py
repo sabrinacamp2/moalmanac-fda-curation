@@ -40,7 +40,7 @@ from .extract_indications_from_fda_label import (
     convert_downloaded_pdf_to_markdown,
     download_pdf_bytes,
 )
-from .workflow_artifacts import (
+from .artifacts import (
     document_label_url,
     load_document_artifact,
     resolve_document_application_number,

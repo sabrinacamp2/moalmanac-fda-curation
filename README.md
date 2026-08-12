@@ -67,7 +67,12 @@ proposals remain separate from explicitly accepted curator decisions.
 ## Repository structure
 
 ```text
-src/moalmanac_fda_curation/   Pipeline and review tools
+src/moalmanac_fda_curation/
+  core/                       FDA extraction and evidence logic
+  review/                     Review packets, decisions, and final assembly
+  workflows/                  Curator-facing workflow orchestration
+  cli.py                      Stable command-line entry point
+  doctor.py                   Installation and environment checks
 .claude/skills/               Agent workflow instructions
 tests/                        Workflow and review tests
 analyses/                     Local curation runs; not committed
