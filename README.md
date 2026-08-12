@@ -1,32 +1,19 @@
-# MOAlmanac FDA-label curation
+# MOAlmanac FDA Curation Assistant
 
-Tools for turning an FDA oncology product label into reviewable
-[Molecular Oncology Almanac](https://moalmanac.org) document and indication drafts.
+An agent-assisted workflow for turning FDA oncology product labels into reviewed
+[Molecular Oncology Almanac](https://moalmanac.org) document and indication JSON.
 
-The repository combines a Python pipeline with a Claude Code skill. The pipeline
-extracts and structures label evidence; Claude Code presents the results step by step
-so a curator can review, edit, or exclude each proposal.
+The pipeline retrieves label evidence and generates structured proposals. A reusable
+skill lets Claude Code or Codex guide the curator through source-linked review, edits,
+exclusions, and final assembly.
 
-## Workflow
+## Install
 
-Given an FDA application number, the workflow can use the latest approved label to:
+Requirements: Python 3.11+, an Anthropic API key, and either
+[Claude Code](https://code.claude.com/docs) or [Codex](https://developers.openai.com/codex/).
 
-1. prepare document metadata;
-2. extract biomarker-relevant indications;
-3. draft descriptions from relevant label sections;
-4. track how the approved indications changed across label versions;
-5. propose initial approval dates; and
-6. assemble draft MOAlmanac JSON.
-
-Generated values remain proposals. The workflow retains source text and provenance so
-the curator can verify them before acceptance.
-
-## Setup
-
-Requirements: Python 3.11+, Claude Code, and an Anthropic API key.
-
-```bash
-git clone <repository-url>
+```shell
+git clone https://github.com/sabrinacamp2/moalmanac-fda-curation.git
 cd moalmanac-fda-curation
 test -d .venv || python3 -m venv .venv
 source .venv/bin/activate
@@ -37,45 +24,45 @@ moalmanac-fda-curation doctor
 
 Do not commit API keys.
 
-## Guided curation
+## Curate with Claude Code
 
 Start Claude Code from the repository root:
 
-```bash
+```shell
 claude
 ```
 
-Invoke the project skill:
+Then invoke the project skill:
 
 ```text
 /moalmanac-fda-curation
 ```
 
-Then provide the FDA application number. The workflow selects the latest approved
-label and shows its date for confirmation. A specific label URL can optionally
-be supplied to curate an earlier label version. The skill guides the curation one
-review decision at a time.
+Provide an NDA or BLA application number when prompted. The skill selects the latest
+approved label, explains each phase, and links the generated review files. You can ask
+questions, inspect local source evidence, edit proposals, exclude indications, and accept
+the final reviewed output.
+
+## Curate with Codex
+
+Open the cloned repository in Codex and ask:
+
+```text
+Use the MOAlmanac FDA curation skill at
+.claude/skills/moalmanac-fda-curation/SKILL.md to curate a new FDA label.
+```
+
+Then provide the NDA or BLA application number when prompted. The review workflow and
+outputs are the same in either harness.
 
 To find the application number, search the drug or active ingredient in
 [Drugs@FDA](https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm). Open the product
 record and use its NDA or BLA number, for example `NDA208558` or `BLA761174`.
 
-## Command line
-
-The pipeline can also be run directly:
-
-```text
-moalmanac-fda-curation prepare-document-review
-moalmanac-fda-curation extract-indication-candidates
-moalmanac-fda-curation prepare-selected-review
-moalmanac-fda-curation record-decision
-moalmanac-fda-curation assemble-reviewed
-```
-
-Run `moalmanac-fda-curation <command> --help` for command options.
+Completed runs write `reviewed/document.json` and `reviewed/indication.json`. Generated
+proposals remain separate from explicitly accepted curator decisions.
 
 ## Current scope
 
-The workflow currently creates new-entry drafts. It does not yet reconcile revised
-labels with existing MOAlmanac records, update `moalmanac-db`, or open pull requests.
-Curator review is required before using any generated content.
+The workflow currently creates new entries from FDA labels. It does not yet revise
+existing MOAlmanac records, update `moalmanac-db`, or open pull requests.
