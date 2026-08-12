@@ -31,10 +31,16 @@ borderline candidates.
 
 ## Description review
 
-Verify that the selected Clinical Studies span concerns the same disease, biomarker,
-line of therapy, and regimen as the indication. The description must not import a
-trial, endpoint, or population from a neighboring indication. Distinguish label
-evidence from editorial wording.
+Review only content added from Clinical Studies or Clinical Pharmacology. Do not assess
+or comment on other wording differences between the description and indication. The
+description generator intentionally applies ASCO Language of Respect, person-first
+phrasing, standardized terminology, generic drug names, clear abbreviation expansion,
+and `variant` instead of `mutation`; those editorial transformations are outside the
+harness assessment.
+
+Verify that selected Clinical Studies or Clinical Pharmacology evidence concerns the same
+disease, biomarker, line of therapy, and regimen as the indication. Added detail must not
+import a definition, trial, endpoint, or population from a neighboring indication.
 
 Only pull Clinical Studies detail into the description when it resolves genuine
 ambiguity in the indication's own wording — for example, naming which specific

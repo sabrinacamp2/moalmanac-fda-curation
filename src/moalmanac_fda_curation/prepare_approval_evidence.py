@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Rebuild history and date matches; may repeat Anthropic API requests.",
+        help="Rebuild existing history and date-match outputs.",
     )
     return parser.parse_args()
 
@@ -86,7 +86,7 @@ def main() -> int:
             return 0
         raise FileExistsError(
             f"{output_path} does not contain every requested indication. "
-            "Use --overwrite after confirming the paid rematch."
+            "Use --overwrite after confirming regeneration."
         )
 
     changelog_payload = load_changelog_payload(changelog_json)

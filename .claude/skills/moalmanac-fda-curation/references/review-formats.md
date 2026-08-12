@@ -17,14 +17,12 @@ Afterward, you’ll review `document.md`, especially editorial fields such as co
 ```
 
 For indication extraction, state that the command downloads the selected label, reads
-Indications and Usage, sends that text to the workflow's configured Anthropic API, and
-produces candidates for selection. This may incur additional API usage.
+Indications and Usage, and produces candidates for selection.
 
 For the post-selection preparation phase, state that the commands generate descriptions,
-download historical labels, propose initial approval dates, send relevant source text
-to the workflow's configured Anthropic API, and prepare review files for only the selected
-candidates. State that this may incur additional API usage. Explain once before the
-uninterrupted phase rather than once per internal step.
+download historical labels, propose initial approval dates, and prepare review files for
+only the selected candidates. Explain once before the uninterrupted phase rather than
+once per internal step.
 
 ## Document review in chat
 
@@ -79,8 +77,9 @@ the proposal or source into chat.>
 ```markdown
 [Open the description review](<absolute-path-to-review/indications/<slug>/description.md>)
 
-**Harness assessment:** <State whether Clinical Studies detail genuinely clarifies the
-indication and whether the cited span supports it.>
+**Harness assessment:** <Comment only on detail added from Clinical Studies or Clinical
+Pharmacology: whether it genuinely clarifies the indication and whether the cited source
+supports it. Do not assess other editorial wording differences.>
 
 1. Accept
 2. Edit

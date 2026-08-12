@@ -35,9 +35,7 @@ export ANTHROPIC_API_KEY="YOUR_API_KEY"
 moalmanac-fda-curation doctor
 ```
 
-Some extraction stages send source text to the configured Anthropic API and may incur
-additional API usage. Do not commit
-API keys.
+Do not commit API keys.
 
 ## Guided curation
 

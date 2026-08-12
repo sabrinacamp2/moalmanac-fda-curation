@@ -17,8 +17,7 @@ ask for curator decisions.
 - Record a decision only after the curator explicitly accepts, edits, excludes, or
   marks the item unresolved.
 - Use `record-decision` for every state change. Do not write decision files manually.
-- When `--overwrite` would repeat an Anthropic API request, explain that additional API
-  usage and obtain confirmation first.
+- Explain what `--overwrite` will regenerate and obtain confirmation first.
 - Never replace the selected label version or use openFDA label text as a fallback.
 
 ## Start safely
@@ -55,9 +54,8 @@ show only the resolved edited field and value in chat, then ask the curator to c
 is correct. Do not continue until they confirm. If they correct it, record the replacement
 edit and confirm again.
 
-Keep external workflow model requests batched where the existing tools support batching.
-Do not insert curator confirmation between internal pipeline stages when no review occurs
-there.
+Keep supported batch operations batched. Do not insert curator confirmation between
+internal pipeline stages when no review occurs there.
 
 Use the proposal's descriptive `review_label` as the heading. Keep the numeric pipeline
 index available only for tool calls and provenance.
@@ -98,10 +96,6 @@ Before submitting a meaningful shell command, explain in plain language:
 - which local artifact group it will write; and
 - what the curator will review after it completes.
 
-Only when the command sends content to the workflow's configured Anthropic API, add a
-short sentence saying so and that it may incur additional API usage. Do not discuss API
-usage for local processing, review rendering, metadata retrieval, or decision recording.
-
 Then submit the command so the harness's shell-approval dialog is the confirmation.
 Do not ask a redundant conversational “ready?” when the shell approval will immediately
 follow. Group uninterrupted pipeline work under one explanation and, where possible,
@@ -110,14 +104,20 @@ before an overwrite, or when the planned scope or cost changes.
 
 ## Assess descriptions
 
-For every description, identify any detail added from Clinical Studies and assess:
+Assess only detail added from Clinical Studies or Clinical Pharmacology. Do not assess or
+comment on other wording differences between the description and indication; those are
+intentional editorial transformations owned by the description prompt, including ASCO
+Language of Respect, person-first phrasing, standardized terminology, generic drug names,
+clear abbreviation expansion, and `variant` instead of `mutation`.
+
+For added Clinical Studies or Clinical Pharmacology detail, assess:
 
 - whether it resolves a real ambiguity in the indication;
 - whether the selected source supports it; and
 - whether it adds irrelevant trial design, population, endpoint, or efficacy detail.
 
-Recommend indication-only wording when the additional detail does not clarify the
-approval. Do not apply the recommendation without explicit curator approval.
+Recommend removing the added detail when it does not clarify the approval. Do not apply
+the recommendation without explicit curator approval.
 
 Ensure `description.md` and `approval.md` repeat the current curator-reviewed indication
 near the top. The curator must be able to judge description relevance and approval-date
