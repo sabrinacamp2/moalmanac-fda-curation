@@ -62,6 +62,15 @@ record and use its NDA or BLA number, for example `NDA208558` or `BLA761174`.
 Completed runs write `reviewed/document.json` and `reviewed/indication.json`. Generated
 proposals remain separate from explicitly accepted curator decisions.
 
+## Repository structure
+
+```text
+src/moalmanac_fda_curation/   Pipeline and review tools
+.claude/skills/               Agent workflow instructions
+tests/                        Workflow and review tests
+analyses/                     Local curation runs; not committed
+```
+
 ## Current scope
 
 The workflow currently creates new entries from FDA labels. It does not yet revise
