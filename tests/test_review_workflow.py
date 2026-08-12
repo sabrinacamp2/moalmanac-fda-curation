@@ -7,6 +7,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from moalmanac_fda_curation.assemble_reviewed import assemble_reviewed
+from moalmanac_fda_curation import (
+    extract_indication_candidates,
+    prepare_document_review,
+    review_state,
+)
 from moalmanac_fda_curation.review_packet import (
     approval_markdown,
     build_stage_packet,
@@ -234,6 +239,111 @@ class ReviewWorkflowTest(unittest.TestCase):
                 ok, detail = virtual_environment_status(project)
                 self.assertFalse(ok)
                 self.assertIn("existing but inactive:", detail)
+
+    def test_document_wrapper_writes_proposal_and_builds_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir) / "run"
+            argv = [
+                "prepare-document-review",
+                "--application-number",
+                "NDA123456",
+                "--work-dir",
+                str(work_dir),
+            ]
+            with patch("sys.argv", argv), patch.object(
+                prepare_document_review, "curate_document", return_value=self.document
+            ), patch.object(prepare_document_review.subprocess, "run") as run:
+                self.assertEqual(prepare_document_review.main(), 0)
+
+            proposal = work_dir / "intermediate" / "document.proposal.json"
+            self.assertTrue(proposal.is_file())
+            command = run.call_args.args[0]
+            self.assertIn("moalmanac_fda_curation.review_packet", command)
+            self.assertIn(str(proposal.resolve()), command)
+
+    def test_review_inputs_derive_stage_artifacts_from_work_dir(self) -> None:
+        from moalmanac_fda_curation.review_state import review_inputs
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir)
+            intermediate = work_dir / "intermediate"
+            labels = work_dir / "labels"
+            changelogs = intermediate / "section1-changelogs"
+            for directory in (intermediate, labels, changelogs):
+                directory.mkdir(parents=True, exist_ok=True)
+            paths = [
+                intermediate / "document.proposal.json",
+                intermediate / "Example-NDA123-claude_chunked_indication_fields.json",
+                intermediate / "selected-approval-evidence.json",
+                labels / "Example-NDA123.pdf",
+                labels / "Example-NDA123.md",
+                changelogs / "Example-nda123-section1-changelog.md",
+            ]
+            for path in paths:
+                path.touch()
+
+            sources, arguments = review_inputs(work_dir, "approval")
+            self.assertEqual(
+                sources,
+                [
+                    intermediate / "Example-NDA123-claude_chunked_indication_fields.json",
+                    intermediate / "selected-approval-evidence.json",
+                ],
+            )
+            self.assertIn("--changelog-markdown", arguments)
+            self.assertIn(str(labels / "Example-NDA123.pdf"), arguments)
+
+    def test_candidate_wrapper_runs_extraction_then_review_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir).resolve()
+            document = work_dir / "intermediate" / "document.proposal.json"
+            document.parent.mkdir(parents=True)
+            document.write_text(json.dumps(self.document), encoding="utf-8")
+            argv = ["extract-indication-candidates", "--work-dir", str(work_dir)]
+            with patch("sys.argv", argv), patch.object(
+                extract_indication_candidates.subprocess, "run"
+            ) as run, patch.object(
+                extract_indication_candidates,
+                "resolve_document_application_number",
+                return_value="NDA123456",
+            ):
+                self.assertEqual(extract_indication_candidates.main(), 0)
+
+            self.assertEqual(run.call_count, 2)
+            extraction_command = run.call_args_list[0].args[0]
+            review_command = run.call_args_list[1].args[0]
+            self.assertIn("moalmanac_fda_curation.extract_indications_from_fda_label", extraction_command)
+            self.assertIn("moalmanac_fda_curation.review_packet", review_command)
+            self.assertIn("--stage", review_command)
+            self.assertIn("candidates", review_command)
+
+    def test_record_decision_rebuilds_affected_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir).resolve()
+            document = work_dir / "intermediate" / "document.proposal.json"
+            document.parent.mkdir(parents=True)
+            document.write_text(json.dumps(self.document), encoding="utf-8")
+            argv = [
+                "record-decision",
+                "--work-dir",
+                str(work_dir),
+                "--stage",
+                "document",
+                "--decision",
+                "accepted",
+            ]
+            with patch("sys.argv", argv), patch.object(
+                review_state.subprocess, "run"
+            ) as run:
+                self.assertEqual(review_state.main(), 0)
+
+            decisions = json.loads(
+                (work_dir / "review" / "decisions.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(decisions["document"]["decision"], "accepted")
+            command = run.call_args.args[0]
+            self.assertIn("moalmanac_fda_curation.review_packet", command)
+            self.assertIn("--decisions-json", command)
 
     def test_generated_sources_remain_unchanged_and_reviewed_output_applies_override(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

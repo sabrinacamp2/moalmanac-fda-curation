@@ -282,8 +282,6 @@ def document_markdown(packet: dict[str, Any]) -> str:
         "",
         "## Pipeline proposal — generated locally from FDA metadata",
         "",
-        "FDA URL fields remain in the generated JSON but are omitted from this review view.",
-        "",
         "```json",
         json.dumps(visible_proposal, indent=2),
         "```",

@@ -14,10 +14,6 @@ from .workflow_artifacts import load_document_artifact, resolve_document_applica
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--document-json", type=Path, required=True)
-    parser.add_argument("--indication-fields-json", type=Path, required=True)
-    parser.add_argument("--label-markdown", type=Path, required=True)
-    parser.add_argument("--label-pdf", type=Path)
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--indication-index", type=int, action="append", required=True)
     parser.add_argument("--model", default=DEFAULT_MODEL)
@@ -25,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Regenerate existing model outputs; requires explicit curator approval.",
+        help="Regenerate existing extraction outputs; requires explicit curator approval.",
     )
     return parser.parse_args()
 
@@ -34,13 +30,27 @@ def run(command: list[str]) -> None:
     subprocess.run(command, check=True)
 
 
+def one_file(directory: Path, pattern: str, name: str) -> Path:
+    matches = sorted(directory.glob(pattern))
+    if len(matches) != 1:
+        raise FileNotFoundError(
+            f"Expected exactly one {name} matching {directory / pattern}; found {len(matches)}"
+        )
+    return matches[0]
+
+
 def main() -> int:
     args = parse_args()
-    document = args.document_json.resolve()
-    document_payload = load_document_artifact(document)
-    indication_fields = args.indication_fields_json.resolve()
-    label_markdown = args.label_markdown.resolve()
     work_dir = args.work_dir.resolve()
+    document = work_dir / "intermediate" / "document.proposal.json"
+    document_payload = load_document_artifact(document)
+    indication_fields = one_file(
+        work_dir / "intermediate",
+        "*-claude_chunked_indication_fields.json",
+        "indication-fields artifact",
+    )
+    label_markdown = one_file(work_dir / "labels", "*.md", "current label Markdown")
+    label_pdf = one_file(work_dir / "labels", "*.pdf", "current label PDF")
     intermediate = work_dir / "intermediate"
     descriptions = intermediate / "selected-description-proposals.json"
     approvals = intermediate / "selected-approval-evidence.json"
@@ -130,8 +140,7 @@ def main() -> int:
                 command.extend(("--changelog-markdown", str(changelog_markdown)))
             if decisions.exists():
                 command.extend(("--decisions-json", str(decisions)))
-            if args.label_pdf:
-                command.extend(("--label-pdf", str(args.label_pdf.resolve())))
+            command.extend(("--label-pdf", str(label_pdf)))
             command.extend(("--label-markdown", str(label_markdown)))
             run(command)
 

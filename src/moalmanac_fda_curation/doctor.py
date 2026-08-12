@@ -119,15 +119,9 @@ def main() -> int:
         print(f"[{marker}] {check['name']}: {check['detail']}")
     failed = [check for check in checks if not check["ok"]]
     if failed:
-        print(
-            f"\n{len(failed)} check(s) failed. "
-            "No content was sent to the configured Anthropic API."
-        )
+        print(f"\n{len(failed)} check(s) failed.")
         return 1
-    print(
-        "\nReady for FDA-label curation. "
-        "No content was sent to the configured Anthropic API."
-    )
+    print("\nReady for FDA-label curation.")
     return 0
 
 

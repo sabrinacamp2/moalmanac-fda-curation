@@ -17,7 +17,8 @@ ask for curator decisions.
 - Record a decision only after the curator explicitly accepts, edits, excludes, or
   marks the item unresolved.
 - Use `record-decision` for every state change. Do not write decision files manually.
-- Explain any paid rerun and obtain confirmation before using `--overwrite`.
+- When `--overwrite` would repeat an Anthropic API request, explain that additional API
+  usage and obtain confirmation first.
 - Never replace the selected label version or use openFDA label text as a fallback.
 
 ## Start safely
@@ -28,8 +29,8 @@ ask for curator decisions.
    inside the active environment and resolve failures before curation.
 3. Obtain the NDA or BLA application number. If unknown, direct the curator to search
    Drugs@FDA by drug or active ingredient; never guess it.
-4. Use `prepare-document` without `--label-url` for the latest approved label. Use a
-   specific FDA label URL only when the curator requests an earlier version.
+4. Use `prepare-document-review` without `--label-url` for the latest approved label.
+   Use a specific FDA label URL only when the curator requests an earlier version.
 5. Show the selected label date before downstream extraction. Keep the FDA URL in
    pipeline data, not in curator-facing review Markdown.
 
@@ -37,9 +38,10 @@ ask for curator decisions.
 
 Use these curator-facing phases:
 
-1. Generate the document proposal and `document.md`; review the document.
-2. Extract all indication proposals and generate `indication-candidates.md`; ask which
-   candidates should continue.
+1. Run `prepare-document-review` to generate the document proposal and `document.md`;
+   review the document.
+2. Run `extract-indication-candidates` to generate all indication proposals and
+   `indication-candidates.md`; ask which candidates should continue.
 3. After one plain-language preview, run `prepare-selected-review` to generate
    descriptions, approval evidence, and stage-specific review files only for the
    selected candidates.
@@ -48,12 +50,10 @@ Use these curator-facing phases:
 5. Record each explicit decision with `record-decision`.
 6. Run `assemble-reviewed` only when all retained indications are complete.
 
-After an edit, rebuild the corresponding review file from existing local artifacts so
-its recorded decision and curator-reviewed value remain current. This does not resend
-label content to the workflow's configured Anthropic API. In chat, show only the resolved
-edited field and value, then ask the curator to confirm it is correct. Do not continue
-until they confirm. If they correct it, record the replacement edit, rebuild, and confirm
-again.
+`record-decision` automatically rebuilds the corresponding review file. After an edit,
+show only the resolved edited field and value in chat, then ask the curator to confirm it
+is correct. Do not continue until they confirm. If they correct it, record the replacement
+edit and confirm again.
 
 Keep external workflow model requests batched where the existing tools support batching.
 Do not insert curator confirmation between internal pipeline stages when no review occurs
@@ -95,10 +95,12 @@ Before submitting a meaningful shell command, explain in plain language:
 - the curation phase and why it is needed;
 - the information it will retrieve or generate;
 - whether it downloads public FDA files;
-- whether it sends content to the workflow's configured Anthropic API and may incur
-  additional API usage;
 - which local artifact group it will write; and
 - what the curator will review after it completes.
+
+Only when the command sends content to the workflow's configured Anthropic API, add a
+short sentence saying so and that it may incur additional API usage. Do not discuss API
+usage for local processing, review rendering, metadata retrieval, or decision recording.
 
 Then submit the command so the harness's shell-approval dialog is the confirmation.
 Do not ask a redundant conversational “ready?” when the shell approval will immediately

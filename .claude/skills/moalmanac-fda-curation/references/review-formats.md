@@ -1,8 +1,8 @@
 # File-first curator review
 
-The `review-packet` tool generates canonical Markdown review files. Do not copy their
-contents into chat. Link to the relevant file, add a clearly labeled harness assessment,
-and ask for a decision.
+The curator-facing workflow commands generate canonical Markdown review files alongside
+their pipeline artifacts. Do not copy their contents into chat. Link to the relevant
+file, add a clearly labeled harness assessment, and ask for a decision.
 
 ## Before a command
 
@@ -13,8 +13,6 @@ Next, I’ll prepare the document record. This collects FDA metadata about the d
 selected label, including brand and generic names, manufacturer, application number,
 label date and URLs, and citation text.
 
-This retrieves public FDA metadata and writes a local proposal. It does not send label
-content to the workflow's configured Anthropic API.
 Afterward, you’ll review `document.md`, especially editorial fields such as company.
 ```
 
@@ -25,8 +23,8 @@ produces candidates for selection. This may incur additional API usage.
 For the post-selection preparation phase, state that the commands generate descriptions,
 download historical labels, propose initial approval dates, send relevant source text
 to the workflow's configured Anthropic API, and prepare review files for only the selected
-candidates. Explain once before the uninterrupted phase rather than once per internal
-step.
+candidates. State that this may incur additional API usage. Explain once before the
+uninterrupted phase rather than once per internal step.
 
 ## Document review in chat
 
@@ -112,9 +110,9 @@ to that numbered event in the full local changelog.
 
 ## Confirm an edit
 
-After recording an edit, rebuild the deterministic review file. In chat, show only the
-resolved field and value, then ask the curator to confirm it. Do not copy the rest of the
-packet into chat and do not move to the next review until the curator confirms.
+`record-decision` rebuilds the deterministic review file automatically. After an edit,
+show only the resolved field and value in chat, then ask the curator to confirm it. Do not
+copy the rest of the packet into chat or move to the next review until they confirm.
 
 ## Trust labels inside deterministic files
 

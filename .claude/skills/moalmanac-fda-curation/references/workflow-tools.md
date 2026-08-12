@@ -12,8 +12,7 @@ moalmanac-fda-curation --help
 
 Always inspect and reuse `.venv` before creating an environment. `doctor` reports the
 virtual-environment state and checks installation, key presence, FDA connectivity, and
-output permissions. It never creates an environment, prints the key, or sends content
-to the workflow's configured Anthropic API.
+output permissions. It never creates an environment or prints the key.
 
 ## Artifact ownership
 
@@ -28,121 +27,33 @@ to the workflow's configured Anthropic API.
 
 ## Generate proposals
 
-Prepare the document. Omitting `--label-url` selects the latest approved label:
+Prepare the document and its review. Omitting `--label-url` selects the latest approved
+label:
 
 ```bash
-moalmanac-fda-curation prepare-document \
+moalmanac-fda-curation prepare-document-review \
   --application-number NDA208558 \
-  --output RUN_DIR/intermediate/document.proposal.json
+  --work-dir RUN_DIR
 ```
 
 Extract indication proposals and source provenance:
 
 ```bash
-moalmanac-fda-curation extract-indications \
-  --document-json RUN_DIR/intermediate/document.proposal.json \
-  --output-dir RUN_DIR
-```
-
-Generate descriptions for retained candidates. Repeat `--indication-index` as needed:
-
-```bash
-moalmanac-fda-curation generate-descriptions \
-  --document-json DOCUMENT_JSON \
-  --indication-fields-json INDICATION_FIELDS_JSON \
-  --label-markdown LABEL_MARKDOWN \
-  --indication-index 0
-```
-
-Prepare history and approval matches as one curator-facing step:
-
-```bash
-moalmanac-fda-curation prepare-approval-evidence \
-  --document-json DOCUMENT_JSON \
-  --indication-fields-json INDICATION_FIELDS_JSON \
-  --work-dir RUN_DIR \
-  --indication-index 0
-```
-
-The wrapper reuses or creates the Indications and Usage changelog, reports skipped
-historical labels, and batches date matching. `build-history` and `match-dates` remain
-available for diagnostics and compatibility.
-
-## Build deterministic review files
-
-After document preparation:
-
-```bash
-moalmanac-fda-curation review-packet \
-  --stage document \
-  --document-json DOCUMENT_JSON \
-  --output-dir RUN_DIR/review
-```
-
-After indication extraction:
-
-```bash
-moalmanac-fda-curation review-packet \
-  --stage candidates \
-  --document-json DOCUMENT_JSON \
-  --indication-fields-json INDICATION_FIELDS_JSON \
-  --label-pdf LABEL_PDF \
-  --label-markdown LABEL_MARKDOWN \
-  --output-dir RUN_DIR/review
+moalmanac-fda-curation extract-indication-candidates \
+  --work-dir RUN_DIR
 ```
 
 After candidate selection, use one wrapper for the remaining preparation:
 
 ```bash
 moalmanac-fda-curation prepare-selected-review \
-  --document-json DOCUMENT_JSON \
-  --indication-fields-json INDICATION_FIELDS_JSON \
-  --label-markdown LABEL_MARKDOWN \
-  --label-pdf LABEL_PDF \
   --work-dir RUN_DIR \
   --indication-index 0 \
   --indication-index 2
 ```
 
 This generates descriptions, approval evidence, and the three stage-specific files for
-each selected indication. It is the normal curator-facing path and reduces shell
-confirmations. The individual commands below remain available for rebuilding a review
-file after a decision or for diagnostics:
-
-```bash
-moalmanac-fda-curation review-packet \
-  --stage indication \
-  --document-json DOCUMENT_JSON \
-  --indication-fields-json INDICATION_FIELDS_JSON \
-  --decisions-json RUN_DIR/review/decisions.json \
-  --label-pdf LABEL_PDF \
-  --label-markdown LABEL_MARKDOWN \
-  --indication-index 0 \
-  --output-dir RUN_DIR/review
-
-moalmanac-fda-curation review-packet \
-  --stage description \
-  --document-json DOCUMENT_JSON \
-  --indication-fields-json INDICATION_FIELDS_JSON \
-  --descriptions-json DESCRIPTIONS_JSON \
-  --decisions-json RUN_DIR/review/decisions.json \
-  --label-pdf LABEL_PDF \
-  --label-markdown LABEL_MARKDOWN \
-  --indication-index 0 \
-  --output-dir RUN_DIR/review
-
-moalmanac-fda-curation review-packet \
-  --stage approval \
-  --document-json DOCUMENT_JSON \
-  --indication-fields-json INDICATION_FIELDS_JSON \
-  --date-matches-json APPROVAL_EVIDENCE_JSON \
-  --changelog-markdown CHANGELOG_MARKDOWN \
-  --decisions-json RUN_DIR/review/decisions.json \
-  --label-pdf LABEL_PDF \
-  --label-markdown LABEL_MARKDOWN \
-  --indication-index 0 \
-  --output-dir RUN_DIR/review
-```
+each selected indication.
 
 The tool chooses stable filenames:
 
@@ -161,13 +72,11 @@ artifacts only when the curator requests more evidence or a review file is incom
 
 ```bash
 moalmanac-fda-curation record-decision \
-  --decisions RUN_DIR/review/decisions.json \
-  --review-log RUN_DIR/review/review.md \
+  --work-dir RUN_DIR \
   --stage indication \
   --indication-index 0 \
   --display-name "RET-positive NSCLC — previously treated" \
-  --decision accepted \
-  --source-artifact INDICATION_FIELDS_JSON
+  --decision accepted
 ```
 
 Valid stages are `document`, `indication`, `description`, and `approval`. Valid
@@ -179,27 +88,23 @@ For an approved edit, repeat `--override FIELD=JSON_VALUE`. Example:
 --decision edited --override 'raw_cancer_type="non-small cell lung cancer"'
 ```
 
-Never run this command before the curator states the decision. Every decision stores
-source hashes; reviewed assembly fails if those artifacts later change.
+Never run this command before the curator states the decision. It locates and hashes the
+stage's source artifacts, records the decision, and rebuilds the affected review file.
+Reviewed assembly fails if a source artifact later changes.
 
 ## Assemble reviewed outputs
 
 ```bash
 moalmanac-fda-curation assemble-reviewed \
-  --document-json DOCUMENT_JSON \
-  --indication-fields-json INDICATION_FIELDS_JSON \
-  --descriptions-json DESCRIPTIONS_JSON \
-  --date-matches-json APPROVAL_EVIDENCE_JSON \
-  --decisions-json RUN_DIR/review/decisions.json \
-  --output-dir RUN_DIR/reviewed
+  --work-dir RUN_DIR
 ```
 
 This writes `reviewed/document.json` and `reviewed/indication.json`. It refuses stale,
 missing, or unresolved required decisions. Never use `--overwrite` without explicit
 curator approval.
 
-After recording an edit, rebuild its review packet, show only the resolved edited
-field/value in chat, and obtain confirmation before continuing.
+After recording an edit, show only the resolved edited field/value from the rebuilt
+review packet in chat and obtain confirmation before continuing.
 
 ## Dependency behavior
 

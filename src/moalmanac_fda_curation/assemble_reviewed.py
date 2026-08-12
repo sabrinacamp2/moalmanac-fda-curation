@@ -164,19 +164,25 @@ def assemble_reviewed(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--document-json", type=Path, required=True)
-    parser.add_argument("--indication-fields-json", type=Path, required=True)
-    parser.add_argument("--descriptions-json", type=Path, required=True)
-    parser.add_argument("--date-matches-json", type=Path, required=True)
-    parser.add_argument("--decisions-json", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
 
+def one_file(directory: Path, pattern: str, name: str) -> Path:
+    matches = sorted(directory.glob(pattern))
+    if len(matches) != 1:
+        raise FileNotFoundError(
+            f"Expected exactly one {name} matching {directory / pattern}; found {len(matches)}"
+        )
+    return matches[0]
+
+
 def main() -> int:
     args = parse_args()
-    output_dir = args.output_dir.resolve()
+    work_dir = args.work_dir.resolve()
+    intermediate = work_dir / "intermediate"
+    output_dir = work_dir / "reviewed"
     document_output = output_dir / "document.json"
     indication_output = output_dir / "indication.json"
     existing = [path for path in (document_output, indication_output) if path.exists()]
@@ -186,15 +192,22 @@ def main() -> int:
             + ", ".join(str(path) for path in existing)
         )
     reviewed_document, reviewed_indications = assemble_reviewed(
-        document=load_document_artifact(args.document_json.resolve()),
+        document=load_document_artifact(intermediate / "document.proposal.json"),
         indication_payload=load_json_object(
-            args.indication_fields_json.resolve(), "Indication fields"
+            one_file(
+                intermediate,
+                "*-claude_chunked_indication_fields.json",
+                "indication-fields artifact",
+            ),
+            "Indication fields",
         ),
         description_payload=load_json_object(
-            args.descriptions_json.resolve(), "Descriptions"
+            intermediate / "selected-description-proposals.json", "Descriptions"
         ),
-        date_matches=load_json_list(args.date_matches_json.resolve(), "Date matches"),
-        decisions=load_decisions(args.decisions_json.resolve()),
+        date_matches=load_json_list(
+            intermediate / "selected-approval-evidence.json", "Date matches"
+        ),
+        decisions=load_decisions(work_dir / "review" / "decisions.json"),
     )
     write_json_atomic(document_output, reviewed_document)
     write_json_atomic(indication_output, reviewed_indications)

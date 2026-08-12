@@ -54,7 +54,7 @@ Invoke the project skill:
 ```
 
 Then provide the FDA application number. The workflow selects the latest approved
-label and shows its date and URL for confirmation. A specific label URL can optionally
+label and shows its date for confirmation. A specific label URL can optionally
 be supplied to curate an earlier label version. The skill guides the curation one
 review decision at a time.
 
@@ -67,10 +67,9 @@ record and use its NDA or BLA number, for example `NDA208558` or `BLA761174`.
 The pipeline can also be run directly:
 
 ```text
-moalmanac-fda-curation prepare-document
-moalmanac-fda-curation extract-indications
+moalmanac-fda-curation prepare-document-review
+moalmanac-fda-curation extract-indication-candidates
 moalmanac-fda-curation prepare-selected-review
-moalmanac-fda-curation review-packet
 moalmanac-fda-curation record-decision
 moalmanac-fda-curation assemble-reviewed
 ```

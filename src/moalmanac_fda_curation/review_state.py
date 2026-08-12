@@ -1,9 +1,11 @@
-"""Record explicit curator decisions without modifying generated artifacts."""
+"""Record an explicit curator decision and refresh its deterministic review."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -151,21 +153,77 @@ def verify_decision_sources(payload: dict[str, Any]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--decisions", type=Path, required=True)
-    parser.add_argument("--review-log", type=Path, required=True)
+    parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--stage", choices=sorted(VALID_STAGES), required=True)
     parser.add_argument("--decision", choices=sorted(VALID_DECISIONS), required=True)
     parser.add_argument("--indication-index", type=int)
     parser.add_argument("--override", action="append", type=parse_override, default=[])
     parser.add_argument("--note")
     parser.add_argument("--display-name", help="Curator-facing indication title for the review log.")
-    parser.add_argument("--source-artifact", action="append", type=Path, required=True)
     return parser.parse_args()
+
+
+def one_file(directory: Path, pattern: str, name: str) -> Path:
+    matches = sorted(directory.glob(pattern))
+    if len(matches) != 1:
+        raise FileNotFoundError(
+            f"Expected exactly one {name} matching {directory / pattern}; found {len(matches)}"
+        )
+    return matches[0]
+
+
+def review_inputs(work_dir: Path, stage: str) -> tuple[list[Path], list[str]]:
+    document = work_dir / "intermediate" / "document.proposal.json"
+    if stage == "document":
+        return [document], ["--document-json", str(document)]
+
+    indications = one_file(
+        work_dir / "intermediate",
+        "*-claude_chunked_indication_fields.json",
+        "indication-fields artifact",
+    )
+    label_pdf = one_file(work_dir / "labels", "*.pdf", "current label PDF")
+    label_markdown = one_file(work_dir / "labels", "*.md", "current label Markdown")
+    sources = [indications]
+    command = [
+        "--document-json",
+        str(document),
+        "--indication-fields-json",
+        str(indications),
+        "--label-pdf",
+        str(label_pdf),
+        "--label-markdown",
+        str(label_markdown),
+    ]
+    if stage == "description":
+        descriptions = work_dir / "intermediate" / "selected-description-proposals.json"
+        sources.append(descriptions)
+        command.extend(("--descriptions-json", str(descriptions)))
+    if stage == "approval":
+        approvals = work_dir / "intermediate" / "selected-approval-evidence.json"
+        changelog = one_file(
+            work_dir / "intermediate" / "section1-changelogs",
+            "*-section1-changelog.md",
+            "Indications and Usage changelog",
+        )
+        sources.append(approvals)
+        command.extend(
+            (
+                "--date-matches-json",
+                str(approvals),
+                "--changelog-markdown",
+                str(changelog),
+            )
+        )
+    return sources, command
 
 
 def main() -> int:
     args = parse_args()
-    decisions_path = args.decisions.resolve()
+    work_dir = args.work_dir.resolve()
+    decisions_path = work_dir / "review" / "decisions.json"
+    review_log = work_dir / "review" / "review.md"
+    sources, review_command = review_inputs(work_dir, args.stage)
     payload = load_decisions(decisions_path)
     overrides = dict(args.override)
     record_decision(
@@ -175,12 +233,12 @@ def main() -> int:
         indication_index=args.indication_index,
         overrides=overrides,
         note=args.note,
-        sources=decision_sources(args.source_artifact),
+        sources=decision_sources(sources),
         display_name=args.display_name,
     )
     write_json_atomic(decisions_path, payload)
     append_review_log(
-        args.review_log.resolve(),
+        review_log,
         args.stage,
         args.decision,
         args.indication_index,
@@ -188,9 +246,24 @@ def main() -> int:
         args.note,
         args.display_name,
     )
+    rebuild = [
+        sys.executable,
+        "-m",
+        "moalmanac_fda_curation.review_packet",
+        "--stage",
+        args.stage,
+        *review_command,
+        "--decisions-json",
+        str(decisions_path),
+        "--output-dir",
+        str(work_dir / "review"),
+    ]
+    if args.stage != "document":
+        rebuild.extend(("--indication-index", str(args.indication_index)))
+    subprocess.run(rebuild, check=True)
     print(f"Recorded {args.decision} decision for {args.stage}")
     print(f"Decisions: {decisions_path}")
-    print(f"Review log: {args.review_log.resolve()}")
+    print(f"Review log: {review_log}")
     return 0
 
 
