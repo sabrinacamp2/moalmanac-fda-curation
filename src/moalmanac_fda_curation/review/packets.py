@@ -160,6 +160,7 @@ def build_stage_packet(
         "display_name": display_name(reviewed_indication, indication_index),
         "pipeline_indication_proposal": indication,
         "current_reviewed_indication": reviewed_indication,
+        "indication_decision": stage_decisions.get("indication") or None,
     }
 
     if stage == "indication":
@@ -275,16 +276,16 @@ def document_markdown(packet: dict[str, Any]) -> str:
     lines = [
         "# Document review",
         "",
-        "## Curation target — FDA metadata",
-        "",
-        f"- FDA application identification number: {target.get('identification_number')}",
-        f"- Selected label date: {target.get('selected_label_date')}",
-        "",
-        "## Pipeline proposal — generated locally from FDA metadata",
+        "## Proposal to review — generated from FDA metadata",
         "",
         "```json",
         json.dumps(visible_proposal, indent=2),
         "```",
+        "",
+        "## Supporting metadata",
+        "",
+        f"- FDA application identification number: {target.get('identification_number')}",
+        f"- Selected label date: {target.get('selected_label_date')}",
         *resolved_edit_json(packet, packet["current_reviewed_document"]),
         *decision_json(packet),
         *artifact_links(packet),
@@ -323,7 +324,17 @@ def indication_markdown(packet: dict[str, Any]) -> str:
     lines = [
         f"# {packet['display_name']} — indication review",
         "",
-        "## FDA source — verbatim Indications and Usage",
+        "## Proposal to review — model generated",
+        "",
+        *blockquote(proposal.get("indication")),
+        "",
+        f"- Biomarker: {proposal.get('raw_biomarkers') or 'null'}",
+        f"- Cancer type: {proposal.get('raw_cancer_type') or 'null'}",
+        f"- Therapeutics: {proposal.get('raw_therapeutics') or 'null'}",
+        "",
+        "## Supporting evidence",
+        "",
+        "### FDA source — verbatim Indications and Usage",
         "",
         *blockquote(packet.get("fda_indications_and_usage_excerpt")),
     ]
@@ -331,21 +342,13 @@ def indication_markdown(packet: dict[str, Any]) -> str:
         lines.extend(
             [
                 "",
-                "## FDA source — verbatim Highlights phrase used by pipeline",
+                "### FDA source — verbatim Highlights phrase used by pipeline",
                 "",
                 *blockquote(highlights["drug_class_phrase"]),
             ]
         )
     lines.extend(
         [
-            "",
-            "## Pipeline proposal — model generated",
-            "",
-            *blockquote(proposal.get("indication")),
-            "",
-            f"- Biomarker: {proposal.get('raw_biomarkers') or 'null'}",
-            f"- Cancer type: {proposal.get('raw_cancer_type') or 'null'}",
-            f"- Therapeutics: {proposal.get('raw_therapeutics') or 'null'}",
             *resolved_edit_json(packet, packet["current_reviewed_indication"]),
             *decision_json(packet),
             *artifact_links(packet),
@@ -358,18 +361,30 @@ def description_markdown(packet: dict[str, Any]) -> str:
     proposal = packet["pipeline_description_proposal"]
     selections = proposal.get("supporting_label_section_selections") or []
     selected_span = selections[0].get("selected_span") if selections else None
+    indication_overrides = (packet.get("indication_decision") or {}).get("overrides") or {}
+    indication_label = (
+        "Curator-edited indication"
+        if "indication" in indication_overrides
+        else "Pipeline indication proposal"
+    )
     lines = [
         f"# {packet['display_name']} — description review",
         "",
-        "## Indication being described — curator-reviewed when available",
-        "",
-        *blockquote(packet["current_reviewed_indication"].get("indication")),
-        "",
-        "## Pipeline description proposal — model generated",
+        "## Proposal to review — model generated",
         "",
         *blockquote(proposal.get("description")),
         "",
-        "## FDA Clinical Studies source — verbatim, span selected by pipeline model",
+        "## Supporting context",
+        "",
+        "### Indication context",
+        "",
+        f"**{indication_label}**",
+        "",
+        *blockquote(packet["current_reviewed_indication"].get("indication")),
+        "",
+        "## Supporting evidence",
+        "",
+        "### FDA Clinical Studies source — verbatim, span selected by pipeline model",
         "",
         *blockquote(selected_span.get("text") if selected_span else None),
         "",
@@ -390,14 +405,16 @@ def approval_markdown(packet: dict[str, Any]) -> str:
     event = verification.get("matched_event") or {}
     event_number = match.get("changelog_event_number")
     event_path = (packet.get("artifacts") or {}).get("selected changelog event")
+    indication_overrides = (packet.get("indication_decision") or {}).get("overrides") or {}
+    indication_label = (
+        "Curator-edited indication"
+        if "indication" in indication_overrides
+        else "Pipeline indication proposal"
+    )
     lines = [
         f"# {packet['display_name']} — initial approval review",
         "",
-        "## Indication being dated — curator-reviewed when available",
-        "",
-        *blockquote(packet["current_reviewed_indication"].get("indication")),
-        "",
-        "## Pipeline selection — event selected by model",
+        "## Proposal to review — event selected by model",
         "",
         f"- Proposed date: {event.get('date') or match.get('approval_date_candidate') or 'unmatched'}",
         f"- Event: {event_number or 'unmatched'}",
@@ -410,7 +427,15 @@ def approval_markdown(packet: dict[str, Any]) -> str:
         f"- Why earlier events were judged incomplete: {match.get('why_earlier_events_are_incomplete') or 'Not available'}",
         f"- Missing or uncertain details: {json.dumps(match.get('missing_or_uncertain_details') or [])}",
         "",
-        "## Deterministically retrieved event evidence",
+        "## Supporting context",
+        "",
+        "### Indication context",
+        "",
+        f"**{indication_label}**",
+        "",
+        *blockquote(packet["current_reviewed_indication"].get("indication")),
+        "",
+        "## Supporting evidence — deterministically retrieved event",
         "",
         f"- Structural verification: {'passed' if verification.get('verified') else 'not verified'}",
         "",

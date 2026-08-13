@@ -92,7 +92,6 @@ Before submitting a meaningful shell command, explain in plain language:
 
 - the curation phase and why it is needed;
 - the information it will retrieve or generate;
-- whether it downloads public FDA files;
 - which local artifact group it will write; and
 - what the curator will review after it completes.
 

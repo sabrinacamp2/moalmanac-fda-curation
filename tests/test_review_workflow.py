@@ -105,6 +105,7 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.assertEqual(packet["display_name"], "RET-positive NSCLC")
         self.assertTrue(packet["fda_highlights_source"]["used_by_pipeline"])
         markdown = indication_markdown(packet)
+        self.assertLess(markdown.index("Proposal to review"), markdown.index("Supporting evidence"))
         self.assertIn("FDA source — verbatim Indications and Usage", markdown)
         self.assertIn("verbatim Highlights phrase", markdown)
         self.assertNotIn("Non-biomarker indication", markdown)
@@ -134,7 +135,17 @@ class ReviewWorkflowTest(unittest.TestCase):
             decisions=decisions,
         )
         self.assertIn("Curator-reviewed indication text.", description_markdown(description_packet))
+        self.assertIn("Curator-edited indication", description_markdown(description_packet))
         self.assertIn("Curator-reviewed indication text.", approval_markdown(approval_packet))
+        self.assertIn("Curator-edited indication", approval_markdown(approval_packet))
+        self.assertLess(
+            description_markdown(description_packet).index("Proposal to review"),
+            description_markdown(description_packet).index("Supporting context"),
+        )
+        self.assertLess(
+            approval_markdown(approval_packet).index("Proposal to review"),
+            approval_markdown(approval_packet).index("Supporting context"),
+        )
 
     def test_regenerated_review_shows_resolved_edit(self) -> None:
         decisions = empty_decisions()

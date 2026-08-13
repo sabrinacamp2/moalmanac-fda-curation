@@ -4,6 +4,9 @@ The curator-facing workflow commands generate canonical Markdown review files al
 their pipeline artifacts. Do not copy their contents into chat. Link to the relevant
 file, add a clearly labeled harness assessment, and ask for a decision.
 
+Each review file presents the proposal first, followed by clearly labeled supporting
+context and evidence. Recorded curator edits and decisions appear after the evidence.
+
 ## Before a command
 
 Immediately before submitting a shell command, send a short preview:
@@ -16,8 +19,8 @@ label date and URLs, and citation text.
 Afterward, you’ll review `document.md`, especially editorial fields such as company.
 ```
 
-For indication extraction, state that the command downloads the selected label, reads
-Indications and Usage, and produces candidates for selection.
+For indication extraction, state that the command reads the selected label's Indications
+and Usage section and produces candidates with source provenance for selection.
 
 For the post-selection preparation phase, state that the commands generate descriptions,
 download historical labels, propose initial approval dates, and prepare review files for
