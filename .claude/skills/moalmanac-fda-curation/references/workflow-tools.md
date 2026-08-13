@@ -12,7 +12,16 @@ moalmanac-fda-curation --help
 
 Always inspect and reuse `.venv` before creating an environment. `doctor` reports the
 virtual-environment state and checks installation, key presence, FDA connectivity, and
-output permissions. It never creates an environment or prints the key.
+permissions for the `analyses/` parent directory. It never creates a placeholder
+curation run or prints the key.
+
+Use one work directory per curation:
+
+```text
+analyses/<Brand>-<ApplicationNumber>/
+```
+
+For example, use `analyses/Yervoy-BLA125377/` for every command in a Yervoy curation.
 
 ## Artifact ownership
 

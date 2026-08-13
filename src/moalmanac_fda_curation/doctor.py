@@ -33,8 +33,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("analyses/curation-candidate"),
-        help="Directory that will contain curation runs.",
+        default=Path("analyses"),
+        help="Parent directory that will contain curation runs.",
     )
     parser.add_argument(
         "--skip-network",

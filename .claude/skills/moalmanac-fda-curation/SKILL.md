@@ -32,6 +32,9 @@ ask for curator decisions.
    Use a specific FDA label URL only when the curator requests an earlier version.
 5. Show the selected label date before downstream extraction. Keep the FDA URL in
    pipeline data, not in curator-facing review Markdown.
+6. Use one work directory for the entire curation, named
+   `analyses/<Brand>-<ApplicationNumber>/`, for example
+   `analyses/Yervoy-BLA125377/`. Reuse that exact path for every workflow command.
 
 ## Generate efficiently, review vertically
 
