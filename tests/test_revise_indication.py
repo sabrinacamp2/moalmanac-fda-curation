@@ -126,20 +126,34 @@ class ReviseIndicationTest(unittest.TestCase):
                 "summary": "Expand the population.",
             },
         )
-        self.assertTrue(result["verified"])
         self.assertEqual(result["proposed_indication"]["id"], self.indication["id"])
         self.assertEqual(result["proposed_indication"]["initial_approval_date"], "2024-02-01")
         self.assertEqual(
             result["proposed_indication"]["initial_approval_url"],
             "https://example.test/2024.pdf",
         )
-        self.assertEqual(result["approval_event"], self.events[0])
         self.assertEqual(
-            result["deterministic_updates"],
+            {
+                key: result["changes"][key]
+                for key in ("initial_approval_date", "initial_approval_url")
+            },
             {
                 "initial_approval_date": "2024-02-01",
                 "initial_approval_url": "https://example.test/2024.pdf",
             },
+        )
+        self.assertEqual(
+            result["source_events"],
+            [{
+                "event_number": 2,
+                "date": "2024-02-01",
+                "label_url": "https://example.test/2024.pdf",
+            }],
+        )
+        self.assertEqual(result["notes"]["summary"], "Expand the population.")
+        self.assertEqual(
+            set(result),
+            {"proposed_indication", "changes", "source_events", "notes"},
         )
 
     def test_non_verbatim_scoped_evidence_fails_verification(self) -> None:

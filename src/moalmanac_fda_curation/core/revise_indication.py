@@ -334,17 +334,23 @@ def propose_revision(
             "initial_approval_url": approval_event["label_url"],
         }
         patch.update(deterministic_updates)
+    if errors:
+        raise ValueError("; ".join(errors))
     proposed = deepcopy(indication)
-    if not errors:
-        proposed.update(patch)
+    proposed.update(patch)
     return {
-        "proposal": proposal,
-        "patch": patch,
-        "deterministic_updates": deterministic_updates,
-        "approval_event": approval_event,
         "proposed_indication": proposed,
-        "scoped_evidence": scoped_evidence,
-        "relevant_events": assessment_result.get("relevant_events") or [],
-        "verified": not errors,
-        "verification_errors": errors,
+        "changes": patch,
+        "source_events": [
+            {
+                "event_number": event["event_number"],
+                "date": event["date"],
+                "label_url": event["label_url"],
+            }
+            for event in sorted(selected_events, key=lambda event: event["date"])
+        ],
+        "notes": {
+            "summary": proposal["summary"],
+            "uncertainties": proposal["uncertainties"],
+        },
     }
