@@ -76,10 +76,13 @@ src/moalmanac_fda_curation/
   doctor.py                   Installation and environment checks
 .claude/skills/               Agent workflow instructions
 tests/                        Workflow and review tests
-analyses/                     Local curation runs; not committed
+analyses/                     Revision notebook plus ignored local curation runs
 ```
 
 ## Current scope
 
-The workflow currently creates new entries from FDA labels. It does not yet revise
-existing MOAlmanac records, update `moalmanac-db`, or open pull requests.
+The primary workflow creates new entries from FDA labels. An exploratory notebook at
+`analyses/revise-one-indication.ipynb` supports detecting and proposing revisions to one
+existing indication from later Section 1 changelog events. It does not write to
+`moalmanac-db`; every proposed patch remains curator-reviewed. The project does not open
+pull requests.

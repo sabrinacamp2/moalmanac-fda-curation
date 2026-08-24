@@ -7,6 +7,7 @@ dependencies = [
   "anthropic>=0.68",
   "markitdown[pdf]>=0.1.1",
   "pydantic>=2.7",
+  "python-dotenv>=1.0",
   "requests>=2.31",
 ]
 

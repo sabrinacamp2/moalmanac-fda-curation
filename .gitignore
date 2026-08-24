@@ -5,4 +5,5 @@ __pycache__/
 .env
 *.egg-info/
 outputs/
-analyses/
+analyses/*
+!analyses/revise-one-indication.ipynb
