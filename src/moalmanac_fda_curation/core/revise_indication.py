@@ -188,6 +188,9 @@ reflect the verified target-specific evidence.
 
 - Never merge a newly added or separate indication into this record.
 - Use only the scoped before and after quotes.
+- The evidence is chronological. Synthesize the final form of the indication;
+  when evidence changes the same wording more than once, the later span supersedes
+  the earlier span.
 - Do not add facts from general knowledge.
 - Preserve the existing writing style where possible.
 - Omit unchanged fields.
@@ -280,6 +283,12 @@ def assess_update(
         for number in requested:
             if number not in scoped_numbers:
                 errors.append(f"Relevant event {number} has no target-specific evidence")
+    scoped_evidence.sort(
+        key=lambda span: (
+            by_number[span["event_number"]]["date"],
+            span["event_number"],
+        )
+    )
     return {
         "assessment": assessment,
         "scoped_evidence": scoped_evidence,

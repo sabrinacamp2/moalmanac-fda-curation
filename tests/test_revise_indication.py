@@ -58,6 +58,7 @@ class ReviseIndicationTest(unittest.TestCase):
         self.assertNotIn("# Fields managed by Python", proposal_prompt)
         self.assertNotIn("Do not propose changes to", proposal_prompt)
         self.assertIn("Never merge a newly added or separate indication", proposal_prompt)
+        self.assertIn("later span supersedes", proposal_prompt)
 
     def test_assessment_hydrates_real_event(self) -> None:
         result = assess_update(
