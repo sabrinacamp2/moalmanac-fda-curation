@@ -55,6 +55,10 @@ class ReviseIndicationTest(unittest.TestCase):
         )
         self.assertIn("# Target-span requirements", assessment_prompt)
         self.assertIn("Ignore newly added or otherwise separate indications", assessment_prompt)
+        self.assertIn("before-text changes information", assessment_prompt)
+        self.assertIn("shares a disease name", assessment_prompt)
+        self.assertIn("# Status requirements", assessment_prompt)
+        self.assertIn("mutually", assessment_prompt)
         self.assertNotIn("# Fields managed by Python", proposal_prompt)
         self.assertNotIn("Do not propose changes to", proposal_prompt)
         self.assertIn("Never merge a newly added or separate indication", proposal_prompt)
@@ -101,6 +105,80 @@ class ReviseIndicationTest(unittest.TestCase):
         )
         self.assertFalse(result["verified"])
         self.assertEqual(result["relevant_events"], [])
+
+    def test_updated_assessment_requires_a_described_change(self) -> None:
+        result = assess_update(
+            self.indication,
+            self.events,
+            llm=lambda _: {
+                "status": "updated",
+                "relevant_event_numbers": [2],
+                "scoped_evidence": [{
+                    "event_number": 2,
+                    "target_before_quote": "adult patients",
+                    "target_after_quote": "adult and pediatric patients 12 years and older",
+                    "target_change": "Population expanded",
+                }],
+                "what_changed": [],
+                "reasoning": "The target remained unchanged.",
+            },
+        )
+        self.assertFalse(result["verified"])
+        self.assertIn(
+            "Updated assessment must describe what changed",
+            result["verification_errors"],
+        )
+
+    def test_not_updated_assessment_cannot_return_revision_evidence(self) -> None:
+        result = assess_update(
+            self.indication,
+            self.events,
+            llm=lambda _: {
+                "status": "not_updated",
+                "relevant_event_numbers": [2],
+                "scoped_evidence": [{
+                    "event_number": 2,
+                    "target_before_quote": "adult patients",
+                    "target_after_quote": "adult and pediatric patients 12 years and older",
+                    "target_change": "Population expanded",
+                }],
+                "what_changed": [],
+                "reasoning": "No update.",
+            },
+        )
+        self.assertFalse(result["verified"])
+        self.assertIn(
+            "Not-updated assessment must not cite relevant events",
+            result["verification_errors"],
+        )
+
+    def test_formatting_only_target_evidence_fails_verification(self) -> None:
+        events = [{
+            **self.events[0],
+            "before_text": "• adult\npatients",
+            "after_text": " adult patients",
+        }]
+        result = assess_update(
+            self.indication,
+            events,
+            llm=lambda _: {
+                "status": "updated",
+                "relevant_event_numbers": [2],
+                "scoped_evidence": [{
+                    "event_number": 2,
+                    "target_before_quote": "• adult\npatients",
+                    "target_after_quote": " adult patients",
+                    "target_change": "Formatting changed",
+                }],
+                "what_changed": ["Formatting changed"],
+                "reasoning": "Only formatting changed.",
+            },
+        )
+        self.assertFalse(result["verified"])
+        self.assertIn(
+            "Event 2 target evidence is formatting-only",
+            result["verification_errors"],
+        )
 
     def test_proposal_preserves_non_updated_fields(self) -> None:
         assessment = {

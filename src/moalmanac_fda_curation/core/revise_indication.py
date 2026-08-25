@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from copy import deepcopy
 from datetime import date
 from pathlib import Path
@@ -151,8 +152,28 @@ Consider changes to:
 - Ignore formatting-only changes.
 - Ignore newly added or otherwise separate indications.
 - Do not mention separate indications in `what_changed` or `reasoning`.
+- Evaluate each event against the complete target indication before selecting it.
+- A replacement event is relevant only when its before-text changes information
+  represented in the target indication. Do not assign a change to the target merely
+  because it shares a disease name, biomarker, or other partial wording.
+- If an event changes a qualifier that the target does not contain, treat it as a
+  separate indication unless the event text explicitly establishes that it concerns
+  this target's population, disease setting, and regimen.
 - Use only the supplied target and changelog evidence.
 - If evidence is insufficient, return `uncertain` rather than guessing.
+
+# Status requirements
+
+- Return `updated` only for at least one clinically meaningful, target-specific
+  change. `updated` requires nonempty `what_changed`, `relevant_event_numbers`, and
+  `scoped_evidence`.
+- Return `not_updated` when the only target-related events are formatting changes or
+  when no event clinically changes the target. For `not_updated`, return empty
+  `what_changed`, `relevant_event_numbers`, and `scoped_evidence`.
+- Return `uncertain` when an event may concern the target but the supplied text cannot
+  establish attribution confidently. Explain that ambiguity in `uncertainties`.
+- Make `status`, `what_changed`, `reasoning`, and the selected evidence mutually
+  consistent.
 
 # Target-span requirements
 
@@ -232,12 +253,17 @@ def _event_map(events: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
     return mapping
 
 
+def _format_normalized(text: str) -> str:
+    """Normalize PDF bullet variants and whitespace for formatting-only checks."""
+    return re.sub(r"\s+", "", text.translate(str.maketrans({"": "•", "": "•"})))
+
+
 def assess_update(
     indication: dict[str, Any],
     candidate_events: list[dict[str, Any]],
     *,
     model: str = DEFAULT_MODEL,
-    max_tokens: int = 2000,
+    max_tokens: int = 8000,
     llm: Callable[[str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Assess an update and deterministically hydrate selected event evidence."""
@@ -278,11 +304,31 @@ def assess_update(
         if after_quote not in event["after_text"]:
             errors.append(f"Event {number} target_after_quote is not verbatim")
             continue
+        if (
+            before_quote is not None
+            and _format_normalized(before_quote) == _format_normalized(after_quote)
+        ):
+            errors.append(f"Event {number} target evidence is formatting-only")
+            continue
         scoped_evidence.append(span)
-    if assessment["status"] == "updated":
+    status = assessment["status"]
+    if status == "updated":
+        if not assessment["what_changed"]:
+            errors.append("Updated assessment must describe what changed")
+        if not requested:
+            errors.append("Updated assessment must cite at least one relevant event")
+        if not assessment["scoped_evidence"]:
+            errors.append("Updated assessment must provide target-specific evidence")
         for number in requested:
             if number not in scoped_numbers:
                 errors.append(f"Relevant event {number} has no target-specific evidence")
+    elif status == "not_updated":
+        if assessment["what_changed"]:
+            errors.append("Not-updated assessment must not describe changes")
+        if requested:
+            errors.append("Not-updated assessment must not cite relevant events")
+        if assessment["scoped_evidence"]:
+            errors.append("Not-updated assessment must not provide revision evidence")
     scoped_evidence.sort(
         key=lambda span: (
             by_number[span["event_number"]]["date"],

@@ -241,8 +241,13 @@ def extract_highlights_drug_class(highlights: str | None) -> str | None:
         if not line:
             continue
 
+        # Two-column FDA Highlights pages are often converted in alternating
+        # column order. A bullet from the other column can therefore appear
+        # before, or between the two lines of, the shared drug-class stem.
+        # Ignore bullet lines while searching instead of assuming the first
+        # bullet marks the end of the introductory sentence.
         if line.startswith(("•", "")):
-            break
+            continue
 
         # In two-column conversions, the adjacent column is often appended
         # after a bullet separator on the same line.
