@@ -3,8 +3,10 @@ from __future__ import annotations
 import unittest
 
 from moalmanac_fda_curation.core.propose_indication_revision import (
+    build_label_diff_revision_prompt,
     build_latest_label_revision_prompt,
     propose_indication_revision,
+    propose_indication_revision_from_label_diff,
 )
 
 
@@ -85,6 +87,70 @@ class ProposeIndicationRevisionTest(unittest.TestCase):
                 self.existing,
                 self.latest,
                 {**self.assessment, "classification": "same"},
+                llm=lambda _: {"updates": []},
+            )
+
+    def test_label_diff_prompt_is_scoped_to_assessed_changes(self) -> None:
+        assessment = {
+            "existing_indication_id": self.existing["id"],
+            "status": "revised",
+            "relevant_hunk_ids": ["hunk-1"],
+            "changes": ["The test designation changed."],
+            "reason": "Supported by the source diff.",
+        }
+        hunks = [{
+            "hunk_id": "hunk-1",
+            "baseline_text": "Target uses an FDA-approved test. Other indication.",
+            "latest_text": "Target uses an FDA-authorized test. Other indication.",
+        }]
+        prompt = build_label_diff_revision_prompt(self.existing, assessment, hunks)
+        self.assertIn("The test designation changed", prompt)
+        self.assertIn("FDA-authorized test", prompt)
+        self.assertIn("A hunk may contain other indications", prompt)
+        self.assertNotIn("initial_approval_date", prompt)
+
+    def test_applies_label_diff_proposal_and_preserves_provenance(self) -> None:
+        assessment = {
+            "existing_indication_id": self.existing["id"],
+            "status": "revised",
+            "relevant_hunk_ids": ["hunk-1"],
+            "changes": ["The test designation changed."],
+            "reason": "Supported by the source diff.",
+        }
+        hunks = [{
+            "hunk_id": "hunk-1",
+            "baseline_text": "FDA-approved test",
+            "latest_text": "FDA-authorized test",
+        }]
+        result = propose_indication_revision_from_label_diff(
+            self.existing,
+            assessment,
+            hunks,
+            llm=lambda _: {"updates": [{
+                "field": "description",
+                "new_value": self.existing["description"].replace(
+                    "FDA approved", "FDA authorized"
+                ),
+            }]},
+        )
+        self.assertEqual(result["supporting_hunk_ids"], ["hunk-1"])
+        self.assertEqual(
+            result["proposed_indication"]["initial_approval_date"],
+            self.existing["initial_approval_date"],
+        )
+
+    def test_label_diff_proposal_requires_matching_revised_assessment(self) -> None:
+        assessment = {
+            "existing_indication_id": "ind:other",
+            "status": "revised",
+            "relevant_hunk_ids": ["hunk-1"],
+            "changes": ["Changed."],
+        }
+        with self.assertRaisesRegex(ValueError, "does not target"):
+            propose_indication_revision_from_label_diff(
+                self.existing,
+                assessment,
+                [{"hunk_id": "hunk-1"}],
                 llm=lambda _: {"updates": []},
             )
 
