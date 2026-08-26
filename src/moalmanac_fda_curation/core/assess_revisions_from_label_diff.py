@@ -12,7 +12,8 @@ from pydantic import BaseModel, Field
 
 from .artifacts import load_json_object, same_url_path
 from .build_section1_changelogs import line_key, logical_blocks
-from .revise_indication import DEFAULT_MODEL
+
+DEFAULT_MODEL = "claude-sonnet-4-5"
 
 
 class ExistingIndicationRevision(BaseModel):

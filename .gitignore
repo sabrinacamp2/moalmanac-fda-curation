@@ -6,6 +6,5 @@ __pycache__/
 *.egg-info/
 outputs/
 analyses/*
-!analyses/revise-one-indication.ipynb
 !analyses/reconcile-latest-indications.ipynb
 !analyses/assess-revisions-from-label-diff.ipynb

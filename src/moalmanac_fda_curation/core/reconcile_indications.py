@@ -9,7 +9,8 @@ from typing import Any, Callable, Literal
 
 from pydantic import BaseModel
 
-from .revise_indication import DEFAULT_MODEL
+
+DEFAULT_MODEL = "claude-sonnet-4-5"
 
 
 class IndicationMapping(BaseModel):
