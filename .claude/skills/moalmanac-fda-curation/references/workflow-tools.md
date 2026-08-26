@@ -18,10 +18,51 @@ curation run or prints the key.
 Use one work directory per curation:
 
 ```text
-analyses/<Brand>-<ApplicationNumber>/
+analyses/<ApplicationNumber>/
 ```
 
-For example, use `analyses/Yervoy-BLA125377/` for every command in a Yervoy curation.
+For example, use `analyses/BLA125377/` for every command in that application’s curation.
+Do not look up the brand name just to construct this directory.
+
+## Locate the MOAlmanac database
+
+Ask the curator: “What is the path to your local `moalmanac-db` repository?” Do this
+before running preflight. Do not inspect sibling directories, search the filesystem or
+internet, or clone a repository to infer the answer.
+
+Resolve the supplied path to an absolute path. It is usable only when both files exist:
+
+```text
+MOALMANAC_DB_ROOT/referenced/documents.json
+MOALMANAC_DB_ROOT/referenced/indications.json
+```
+
+If either file is absent, explain which expected file was not found and ask the curator
+to correct the repository path. The database files are read-only inputs during FDA
+curation; do not edit them.
+
+## Check existing curation
+
+Before the command, explain:
+
+> I’ll check whether this application already has an FDA document in your MOAlmanac
+> database. If it does, I’ll compare the date of the label we curated with FDA’s latest
+> approved label so we can decide whether to perform first-time curation, review an
+> update, or stop because the curated label is current. This reads the database without
+> modifying it and saves the result in the session’s intermediate files.
+
+Then run:
+
+```bash
+moalmanac-fda-curation check-curation-preflight \
+  --application-number BLA125554 \
+  --documents-json MOALMANAC_DB_ROOT/referenced/documents.json \
+  --output-json RUN_DIR/intermediate/curation-preflight.json
+```
+
+If the application is uncurated, continue with the new-entry workflow below. If it is
+curated and a newer label is available, use the update-analysis commands. If no newer
+label is available, do not regenerate the existing entry.
 
 ## Artifact ownership
 
@@ -34,7 +75,7 @@ For example, use `analyses/Yervoy-BLA125377/` for every command in a Yervoy cura
 - `reviewed/document.json` and `reviewed/indication.json`: curator-reviewed outputs;
   create only with `assemble-reviewed`.
 
-## Generate proposals
+## Generate first-time curation proposals
 
 Prepare the document and its review. Omitting `--label-url` selects the latest approved
 label:
@@ -63,6 +104,56 @@ moalmanac-fda-curation prepare-selected-review \
 
 This generates descriptions, approval evidence, and the three stage-specific files for
 each selected indication.
+
+## Analyze a newer label for an existing entry
+
+Prepare the latest label, extract its indications, and reconcile them against MOAlmanac
+in one command:
+
+```bash
+moalmanac-fda-curation prepare-update-indication-review \
+  --application-number BLA125554 \
+  --database-dir MOALMANAC_DB_ROOT \
+  --work-dir RUN_DIR
+```
+
+Successful matches require no separate review. The command writes
+`review/reconciliation-exceptions.md` only when a mapping is `not_found` or `uncertain`;
+stop for curator review in that case. Otherwise, curate any printed new-indication
+indexes, or proceed directly to revision analysis when there are none. The full mapping
+is retained in `intermediate/indication-reconciliation.json` for provenance.
+
+By default, reconciliation includes only latest-label candidates with a biomarker. Use
+`--include-non-biomarker` only when the scope requires those indications. `not_found`
+and `uncertain` are review flags, not evidence that an FDA indication was removed.
+
+Assess revisions using the cached Indications and Usage text for the curated baseline
+and latest label:
+
+```bash
+moalmanac-fda-curation prepare-label-history \
+  --work-dir RUN_DIR
+
+moalmanac-fda-curation assess-revised-indications \
+  --existing-indications-json MOALMANAC_DB_ROOT/referenced/indications.json \
+  --document-id doc:fda.example \
+  --section-cache-json CACHE_PATH_PRINTED_BY_PREPARE_LABEL_HISTORY \
+  --baseline-label-url BASELINE_FDA_LABEL_URL \
+  --latest-label-url LATEST_FDA_LABEL_URL \
+  --output-json RUN_DIR/intermediate/revision-assessment.json
+```
+
+The assessment artifact contains the deterministic diff hunks used as evidence. Generate
+minimal patches only from a verified assessment:
+
+```bash
+moalmanac-fda-curation propose-revised-indications \
+  --assessment-json RUN_DIR/intermediate/revision-assessment.json \
+  --output-json RUN_DIR/intermediate/revision-proposals.json
+```
+
+These commands create analysis artifacts, not curator decisions or database edits. They
+refuse to replace an existing output unless `--overwrite` is supplied.
 
 The tool chooses stable filenames:
 

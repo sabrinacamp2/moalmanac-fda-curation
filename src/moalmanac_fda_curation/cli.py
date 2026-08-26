@@ -5,15 +5,31 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 
+from dotenv import load_dotenv
+
 from . import doctor
 from .review import assembly, decisions
-from .workflows import extract_candidates, prepare_document, prepare_selected
+from .workflows import (
+    assess_revisions,
+    check_preflight,
+    extract_candidates,
+    prepare_document,
+    prepare_label_history,
+    prepare_selected,
+    prepare_update_indications,
+    propose_revisions,
+    reconcile_indications,
+)
 
 
 COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
     "doctor": (
         "Check installation, API-key presence, FDA access, and output permissions",
         doctor.main,
+    ),
+    "check-curation-preflight": (
+        "Check whether an FDA application is curated and has a newer label",
+        check_preflight.main,
     ),
     "prepare-document-review": (
         "Prepare FDA document metadata and its curator review",
@@ -22,6 +38,26 @@ COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
     "extract-indication-candidates": (
         "Extract indication candidates and create their screening review",
         extract_candidates.main,
+    ),
+    "reconcile-indications": (
+        "Map existing indications to the latest-label indication candidates",
+        reconcile_indications.main,
+    ),
+    "prepare-update-indication-review": (
+        "Prepare latest-label reconciliation and unresolved exception review",
+        prepare_update_indications.main,
+    ),
+    "prepare-label-history": (
+        "Build historical Indications and Usage changelog and cache artifacts",
+        prepare_label_history.main,
+    ),
+    "assess-revised-indications": (
+        "Identify existing indications revised between two FDA labels",
+        assess_revisions.main,
+    ),
+    "propose-revised-indications": (
+        "Propose minimal patches for verified revised indications",
+        propose_revisions.main,
     ),
     "prepare-selected-review": (
         "Prepare descriptions, approval evidence, and review files for selected indications",
@@ -50,6 +86,7 @@ def usage() -> str:
 
 
 def main() -> int:
+    load_dotenv()
     if len(sys.argv) < 2 or sys.argv[1] in {"-h", "--help"}:
         print(usage())
         return 0

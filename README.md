@@ -60,6 +60,22 @@ record and use its NDA or BLA number, for example `NDA208558` or `BLA761174`.
 Completed runs write `reviewed/document.json` and `reviewed/indication.json`. Generated
 proposals remain separate from explicitly accepted curator decisions.
 
+For an application that MOAlmanac already curated and that has a newer approved label,
+the update workflow combines latest-label preparation, indication extraction, and
+reconciliation into one routing step:
+
+```shell
+moalmanac-fda-curation prepare-update-indication-review \
+  --application-number BLA125554 \
+  --database-dir /path/to/moalmanac-db \
+  --work-dir analyses/BLA125554
+```
+
+Successful matches are retained in JSON without requiring review. If any existing
+indication is not found or a mapping is uncertain, review
+`review/reconciliation-exceptions.md` before continuing. Otherwise, curate any new
+indication indexes printed by the command and then proceed to revision analysis.
+
 ## Manual setup and troubleshooting
 
 If guided setup does not complete successfully, see the
@@ -81,8 +97,9 @@ analyses/                     Revision notebook plus ignored local curation runs
 
 ## Current scope
 
-The primary workflow creates new entries from FDA labels. An exploratory notebook at
-`analyses/revise-one-indication.ipynb` supports detecting and proposing revisions to one
-existing indication from later Section 1 changelog events. It does not write to
-`moalmanac-db`; every proposed patch remains curator-reviewed. The project does not open
-pull requests.
+The primary reviewed workflow creates new entries from FDA labels. CLI analysis commands
+also check whether an application was previously curated, reconcile existing indications
+against a newer label, identify revised indications from deterministic source diffs, and
+propose minimal patches. These update commands do not yet record curator decisions or
+assemble reviewed database updates. The project does not write to `moalmanac-db`, commit,
+push, or open pull requests.
