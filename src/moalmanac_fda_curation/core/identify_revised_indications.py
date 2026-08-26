@@ -1,4 +1,4 @@
-"""Assess existing indications against a deterministic two-label Section 1 diff."""
+"""Identify revised indications from a deterministic two-label Section 1 diff."""
 
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def build_section_diff_hunks(
     return hunks
 
 
-def build_revision_assessment_prompt(
+def build_revision_identification_prompt(
     existing_indications: list[dict[str, Any]],
     diff_hunks: list[dict[str, Any]],
 ) -> str:
@@ -166,7 +166,7 @@ def _call_claude(prompt: str, model: str, max_tokens: int) -> dict[str, Any]:
     return parsed.model_dump() if hasattr(parsed, "model_dump") else parsed.dict()
 
 
-def assess_revisions_from_label_diff(
+def identify_revised_indications(
     existing_indications: list[dict[str, Any]],
     diff_hunks: list[dict[str, Any]],
     *,
@@ -174,7 +174,7 @@ def assess_revisions_from_label_diff(
     max_tokens: int = 8000,
     llm: Callable[[str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Assess, hydrate, and verify source-diff attribution for each indication."""
+    """Identify, hydrate, and verify revisions to existing indications."""
     existing_by_id = {item.get("id"): item for item in existing_indications}
     if None in existing_by_id or len(existing_by_id) != len(existing_indications):
         raise ValueError("Existing indications must have unique non-null IDs")
@@ -182,7 +182,7 @@ def assess_revisions_from_label_diff(
     if None in hunks_by_id or len(hunks_by_id) != len(diff_hunks):
         raise ValueError("Diff hunks must have unique non-null hunk IDs")
 
-    prompt = build_revision_assessment_prompt(existing_indications, diff_hunks)
+    prompt = build_revision_identification_prompt(existing_indications, diff_hunks)
     raw = llm(prompt) if llm else _call_claude(prompt, model, max_tokens)
     assessments = LabelDiffRevisionResponse.model_validate(raw).model_dump()["assessments"]
     errors: list[str] = []

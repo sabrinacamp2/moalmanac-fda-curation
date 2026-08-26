@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import unittest
 
-from moalmanac_fda_curation.core.reconcile_indications import reconcile_indications
+from moalmanac_fda_curation.core.identify_new_indications import (
+    map_existing_to_latest_indications,
+    select_new_indication_candidates,
+)
 
 
-class ReconcileIndicationsTest(unittest.TestCase):
+class IdentifyNewIndicationsTest(unittest.TestCase):
     def setUp(self) -> None:
         self.existing = [
             {"id": "ind:1", "indication": "Drug for BRAF-positive melanoma", "document_id": "doc:1"},
@@ -18,7 +21,7 @@ class ReconcileIndicationsTest(unittest.TestCase):
 
     def test_maps_identity_in_one_call(self) -> None:
         prompts = []
-        result = reconcile_indications(
+        result = map_existing_to_latest_indications(
             self.existing,
             self.latest,
             llm=lambda prompt: prompts.append(prompt) or {"mappings": [
@@ -44,7 +47,7 @@ class ReconcileIndicationsTest(unittest.TestCase):
         self.assertNotIn("raw_biomarkers", prompt)
 
     def test_matched_pair_requires_both_sides(self) -> None:
-        result = reconcile_indications(
+        result = map_existing_to_latest_indications(
             [self.existing[0]],
             [self.latest[0]],
             llm=lambda _: {"mappings": [
@@ -69,7 +72,7 @@ class ReconcileIndicationsTest(unittest.TestCase):
         )
 
     def test_missing_and_duplicate_coverage_fail_verification(self) -> None:
-        result = reconcile_indications(
+        result = map_existing_to_latest_indications(
             self.existing,
             self.latest,
             llm=lambda _: {"mappings": [
@@ -80,6 +83,33 @@ class ReconcileIndicationsTest(unittest.TestCase):
         self.assertFalse(result["verified"])
         self.assertIn("Existing indication mapped more than once: ind:1", result["verification_errors"])
         self.assertIn("Existing indication not accounted for: ind:2", result["verification_errors"])
+
+    def test_selects_hydrated_new_candidates(self) -> None:
+        mapping_result = {
+            "verified": True,
+            "mappings": [
+                {
+                    "classification": "matched",
+                    "latest_indication": self.latest[0],
+                    "reason": "Existing counterpart.",
+                },
+                {
+                    "classification": "new",
+                    "latest_indication": self.latest[1],
+                    "reason": "No existing counterpart.",
+                },
+            ],
+        }
+        candidates = select_new_indication_candidates(mapping_result)
+        self.assertEqual(candidates[0]["latest_indication_index"], 1)
+        self.assertEqual(candidates[0]["raw_biomarkers"], "ALK")
+        self.assertEqual(
+            candidates[0]["new_candidate_reason"], "No existing counterpart."
+        )
+
+    def test_rejects_candidates_from_unverified_mapping(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unverified mapping"):
+            select_new_indication_candidates({"verified": False, "mappings": []})
 
 
 if __name__ == "__main__":

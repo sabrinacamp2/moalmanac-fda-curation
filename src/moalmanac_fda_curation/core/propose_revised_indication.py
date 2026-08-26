@@ -116,7 +116,7 @@ def _call_claude(prompt: str, model: str, max_tokens: int) -> dict[str, Any]:
     return parsed.model_dump() if hasattr(parsed, "model_dump") else parsed.dict()
 
 
-def propose_indication_revision_from_label_diff(
+def propose_revised_indication(
     existing_indication: dict[str, Any],
     revision_assessment: dict[str, Any],
     diff_hunks: list[dict[str, Any]],

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import unittest
 
-from moalmanac_fda_curation.core.propose_indication_revision import (
+from moalmanac_fda_curation.core.propose_revised_indication import (
     build_label_diff_revision_prompt,
-    propose_indication_revision_from_label_diff,
+    propose_revised_indication,
 )
 
 
-class ProposeIndicationRevisionTest(unittest.TestCase):
+class ProposeRevisedIndicationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.existing = {
             "id": "ind:fda.example:0",
@@ -44,7 +44,7 @@ class ProposeIndicationRevisionTest(unittest.TestCase):
         self.assertNotIn("initial_approval_date", prompt)
 
     def test_applies_proposal_and_preserves_provenance(self) -> None:
-        result = propose_indication_revision_from_label_diff(
+        result = propose_revised_indication(
             self.existing,
             self.assessment,
             self.hunks,
@@ -64,14 +64,14 @@ class ProposeIndicationRevisionTest(unittest.TestCase):
 
     def test_requires_matching_revised_assessment(self) -> None:
         with self.assertRaisesRegex(ValueError, "does not target"):
-            propose_indication_revision_from_label_diff(
+            propose_revised_indication(
                 self.existing,
                 {**self.assessment, "existing_indication_id": "ind:other"},
                 self.hunks,
                 llm=lambda _: {"updates": []},
             )
         with self.assertRaisesRegex(ValueError, "requires a 'revised'"):
-            propose_indication_revision_from_label_diff(
+            propose_revised_indication(
                 self.existing,
                 {**self.assessment, "status": "not_revised"},
                 self.hunks,
@@ -79,7 +79,7 @@ class ProposeIndicationRevisionTest(unittest.TestCase):
             )
 
     def test_allows_no_update_when_hunk_is_not_target_specific_enough(self) -> None:
-        result = propose_indication_revision_from_label_diff(
+        result = propose_revised_indication(
             self.existing,
             self.assessment,
             self.hunks,

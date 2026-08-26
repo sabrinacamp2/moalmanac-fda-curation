@@ -5,15 +5,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from moalmanac_fda_curation.core.assess_revisions_from_label_diff import (
-    assess_revisions_from_label_diff,
-    build_revision_assessment_prompt,
+from moalmanac_fda_curation.core.identify_revised_indications import (
+    build_revision_identification_prompt,
     build_section_diff_hunks,
+    identify_revised_indications,
     load_section_pair_from_cache,
 )
 
 
-class AssessRevisionsFromLabelDiffTest(unittest.TestCase):
+class IdentifyRevisedIndicationsTest(unittest.TestCase):
     def test_loads_cached_sections_while_ignoring_url_scheme(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "cache.json"
@@ -51,7 +51,7 @@ class AssessRevisionsFromLabelDiffTest(unittest.TestCase):
             "latest_context_before": [],
             "latest_context_after": [],
         }]
-        result = assess_revisions_from_label_diff(
+        result = identify_revised_indications(
             existing,
             hunks,
             llm=lambda _: {"assessments": [{
@@ -66,7 +66,7 @@ class AssessRevisionsFromLabelDiffTest(unittest.TestCase):
         self.assertEqual(result["assessments"][0]["relevant_hunks"][0], hunks[0])
 
     def test_prompt_is_source_diff_focused(self) -> None:
-        prompt = build_revision_assessment_prompt(
+        prompt = build_revision_identification_prompt(
             [{"id": "ind:1", "indication": "Drug for population A", "description": "omit"}],
             [{"hunk_id": "hunk-1", "baseline_text": "before", "latest_text": "after"}],
         )

@@ -1,4 +1,4 @@
-"""Map existing MOAlmanac indications to latest-label candidates."""
+"""Identify latest-label indications with no existing MOAlmanac counterpart."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class IndicationMapping(BaseModel):
     reason: str
 
 
-class ReconciliationResponse(BaseModel):
+class IndicationMappingResponse(BaseModel):
     mappings: list[IndicationMapping]
 
 
@@ -62,7 +62,7 @@ def indexed_latest_indications(
     return output
 
 
-def build_reconciliation_prompt(
+def build_indication_mapping_prompt(
     existing_indications: list[dict[str, Any]],
     latest_indications: list[dict[str, Any]],
 ) -> str:
@@ -130,13 +130,13 @@ def _call_claude(prompt: str, model: str, max_tokens: int) -> dict[str, Any]:
         max_tokens=max_tokens,
         temperature=0,
         messages=[{"role": "user", "content": prompt}],
-        output_format=ReconciliationResponse,
+        output_format=IndicationMappingResponse,
     )
     parsed = response.parsed_output
     return parsed.model_dump() if hasattr(parsed, "model_dump") else parsed.dict()
 
 
-def reconcile_indications(
+def map_existing_to_latest_indications(
     existing_indications: list[dict[str, Any]],
     latest_indications: list[dict[str, Any]],
     *,
@@ -154,9 +154,9 @@ def reconcile_indications(
     if None in latest_by_index or len(latest_by_index) != len(latest_indications):
         raise ValueError("Latest indications must have unique indexes")
 
-    prompt = build_reconciliation_prompt(existing_indications, latest_indications)
+    prompt = build_indication_mapping_prompt(existing_indications, latest_indications)
     raw = llm(prompt) if llm else _call_claude(prompt, model, max_tokens)
-    mappings = ReconciliationResponse.model_validate(raw).model_dump()["mappings"]
+    mappings = IndicationMappingResponse.model_validate(raw).model_dump()["mappings"]
     errors: list[str] = []
     seen_existing: list[str] = []
     seen_latest: list[int] = []
@@ -223,3 +223,30 @@ def reconcile_indications(
         errors.append(f"Latest indication not accounted for: {value}")
 
     return {"mappings": hydrated, "verified": not errors, "verification_errors": errors}
+
+
+def select_new_indication_candidates(
+    mapping_result: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return hydrated latest-label records classified as new."""
+    if not mapping_result.get("verified"):
+        raise ValueError("Cannot select new candidates from an unverified mapping")
+    mappings = mapping_result.get("mappings")
+    if not isinstance(mappings, list):
+        raise ValueError("Mapping result must contain a mappings list")
+    candidates = []
+    for index, mapping in enumerate(mappings):
+        if not isinstance(mapping, dict):
+            raise ValueError(f"Mapping {index} must be an object")
+        if mapping.get("classification") != "new":
+            continue
+        latest = mapping.get("latest_indication")
+        if not isinstance(latest, dict):
+            raise ValueError(f"New mapping {index} is missing its latest indication")
+        candidates.append(
+            {
+                **latest,
+                "new_candidate_reason": mapping.get("reason"),
+            }
+        )
+    return candidates
