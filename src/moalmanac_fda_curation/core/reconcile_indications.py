@@ -7,28 +7,17 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from .revise_indication import DEFAULT_MODEL
 
 
-class MeaningfulDifference(BaseModel):
-    """Difference between a mapped pair."""
-
-    existing_wording: str = Field(description="Relevant existing wording.")
-    latest_wording: str = Field(description="Corresponding newer-label wording.")
-    difference: str = Field(
-        description="How the newer wording differs, not including clause ordering, abbreviation, punctuation, expansion of acronyms."
-    )
-
-
 class IndicationMapping(BaseModel):
-    """One final mapping and classification."""
+    """One indication identity mapping."""
 
     existing_indication_id: str | None
     latest_indication_index: int | None
-    classification: Literal["same", "revised", "new", "not_found", "uncertain"]
-    differences: list[MeaningfulDifference] = Field(default_factory=list)
+    classification: Literal["matched", "new", "not_found", "uncertain"]
     reason: str
 
 
@@ -76,7 +65,7 @@ def build_reconciliation_prompt(
     existing_indications: list[dict[str, Any]],
     latest_indications: list[dict[str, Any]],
 ) -> str:
-    """Build the single-call mapping and revision-classification prompt."""
+    """Build the indication identity-mapping prompt."""
     existing_items = [
         {"id": item["id"], "indication": item["indication"]}
         for item in existing_indications
@@ -93,10 +82,10 @@ def build_reconciliation_prompt(
 Map existing curated MOAlmanac FDA indications to indications extracted from a
 newer FDA label, and classify every resulting relationship.
 
-For each possible pair, make two judgments in order:
-
-1. Do the records represent the same underlying FDA indication?
-2. If they do, has the indication been updated?
+Determine whether each existing and newer-label record represents the same
+underlying FDA indication. This task is only about identity across label versions.
+Do not compare or report wording differences, and do not decide whether a matched
+indication is the same or revised.
 
 # Existing MOAlmanac indications
 
@@ -112,16 +101,17 @@ For each possible pair, make two judgments in order:
 
 # Classifications
 
-- `same`: the pair represents the same underlying indication and the indication has not been updated
-- `revised`: the pair represents the same underlying indication and the indication has been updated
+- `matched`: the records represent the same underlying FDA indication.
 - `new`: a newer-label indication has no existing counterpart.
 - `not_found`: an existing indication has no newer-label counterpart.
-- `uncertain`: identity or revision status cannot be determined confidently,
-  including possible splits or merges.
+- `uncertain`: identity cannot be determined confidently, including possible splits
+  or merges.
 
 # Mapping rules
 
 - Account for every existing and every newer-label indication exactly once.
+- Match identity based on the indication as a whole; wording differences do not by
+  themselves make a newer-label indication `new`.
 - Use only the supplied indication strings; do not add outside clinical knowledge."""
 
 
@@ -174,7 +164,6 @@ def reconcile_indications(
         existing_id = mapping["existing_indication_id"]
         latest_index = mapping["latest_indication_index"]
         classification = mapping["classification"]
-        differences = mapping["differences"]
         if existing_id is not None:
             if existing_id not in existing_by_id:
                 errors.append(
@@ -187,11 +176,11 @@ def reconcile_indications(
                     f"Mapping {index} cites unknown latest index: {latest_index}"
                 )
             seen_latest.append(latest_index)
-        if classification in {"same", "revised"} and (
+        if classification == "matched" and (
             existing_id is None or latest_index is None
         ):
             errors.append(
-                f"Mapping {index} classification {classification} requires both sides"
+                f"Mapping {index} classification matched requires both sides"
             )
         if classification == "new" and (
             existing_id is not None or latest_index is None
@@ -212,14 +201,6 @@ def reconcile_indications(
         ):
             errors.append(
                 f"Mapping {index} classification uncertain must reference an indication"
-            )
-        if classification == "revised" and not differences:
-            errors.append(
-                f"Mapping {index} revised classification requires meaningful differences"
-            )
-        if classification != "revised" and differences:
-            errors.append(
-                f"Mapping {index} classification {classification} must not report differences"
             )
         hydrated.append(
             {

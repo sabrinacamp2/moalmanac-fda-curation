@@ -16,7 +16,7 @@ class ReconcileIndicationsTest(unittest.TestCase):
             {"latest_indication_index": 1, "indication": "Drug for ALK-positive lung cancer", "raw_biomarkers": "ALK"},
         ]
 
-    def test_maps_and_classifies_in_one_call(self) -> None:
+    def test_maps_identity_in_one_call(self) -> None:
         prompts = []
         result = reconcile_indications(
             self.existing,
@@ -25,48 +25,56 @@ class ReconcileIndicationsTest(unittest.TestCase):
                 {
                     "existing_indication_id": "ind:1",
                     "latest_indication_index": 0,
-                    "classification": "revised",
-                    "differences": [{
-                        "existing_wording": "BRAF-positive melanoma",
-                        "latest_wording": "adult BRAF-positive melanoma",
-                        "difference": "The newer wording specifies an adult population.",
-                    }],
+                    "classification": "matched",
                     "reason": "Same use with an adult qualifier.",
                 },
-                {"existing_indication_id": "ind:2", "latest_indication_index": None, "classification": "not_found", "differences": [], "reason": "No counterpart."},
-                {"existing_indication_id": None, "latest_indication_index": 1, "classification": "new", "differences": [], "reason": "No counterpart."},
+                {"existing_indication_id": "ind:2", "latest_indication_index": None, "classification": "not_found", "reason": "No counterpart."},
+                {"existing_indication_id": None, "latest_indication_index": 1, "classification": "new", "reason": "No counterpart."},
             ]},
         )
         self.assertTrue(result["verified"])
-        self.assertEqual(result["mappings"][0]["classification"], "revised")
+        self.assertEqual(result["mappings"][0]["classification"], "matched")
         self.assertEqual(result["mappings"][0]["existing_indication"]["id"], "ind:1")
         prompt = prompts[0]
-        self.assertIn("two judgments in order", prompt)
+        self.assertIn("only about identity across label versions", prompt)
+        self.assertIn("Do not compare or report wording differences", prompt)
+        self.assertNotIn("`same`:", prompt)
+        self.assertNotIn("`revised`:", prompt)
         self.assertNotIn("document_id", prompt)
         self.assertNotIn("raw_biomarkers", prompt)
 
-    def test_revised_requires_important_difference(self) -> None:
+    def test_matched_pair_requires_both_sides(self) -> None:
         result = reconcile_indications(
             [self.existing[0]],
             [self.latest[0]],
-            llm=lambda _: {"mappings": [{
-                "existing_indication_id": "ind:1",
-                "latest_indication_index": 0,
-                "classification": "revised",
-                "differences": [],
-                "reason": "Revised.",
-            }]},
+            llm=lambda _: {"mappings": [
+                {
+                    "existing_indication_id": "ind:1",
+                    "latest_indication_index": None,
+                    "classification": "matched",
+                    "reason": "Match missing its latest side.",
+                },
+                {
+                    "existing_indication_id": None,
+                    "latest_indication_index": 0,
+                    "classification": "new",
+                    "reason": "No counterpart.",
+                },
+            ]},
         )
         self.assertFalse(result["verified"])
-        self.assertIn("Mapping 0 revised classification requires meaningful differences", result["verification_errors"])
+        self.assertIn(
+            "Mapping 0 classification matched requires both sides",
+            result["verification_errors"],
+        )
 
     def test_missing_and_duplicate_coverage_fail_verification(self) -> None:
         result = reconcile_indications(
             self.existing,
             self.latest,
             llm=lambda _: {"mappings": [
-                {"existing_indication_id": "ind:1", "latest_indication_index": 0, "classification": "same", "differences": [], "reason": "Same."},
-                {"existing_indication_id": "ind:1", "latest_indication_index": 1, "classification": "uncertain", "differences": [], "reason": "Ambiguous."},
+                {"existing_indication_id": "ind:1", "latest_indication_index": 0, "classification": "matched", "reason": "Matched."},
+                {"existing_indication_id": "ind:1", "latest_indication_index": 1, "classification": "uncertain", "reason": "Ambiguous."},
             ]},
         )
         self.assertFalse(result["verified"])
