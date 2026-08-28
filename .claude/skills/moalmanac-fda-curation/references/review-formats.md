@@ -110,6 +110,25 @@ evidence so the curator can judge clinical equivalence without changing context.
 before/after evidence is copied directly from the selected changelog event, and it links
 to that numbered event in the full local changelog.
 
+## Revision review in chat
+
+Only indications classified as revised receive a Markdown review. Do not list unchanged
+indications unless the curator asks for the audit result.
+
+```markdown
+[Open the flagged revision](<absolute-path-to-review/revisions/<indication-id>.md>)
+
+**Harness assessment:** <Assess whether the exact FDA wording change supports the
+proposed field patch. Do not repeat the diff or unchanged indication list in chat.>
+
+1. Inspect or question the proposed revision
+2. Inspect more source context
+3. Flag for later resolution
+```
+
+Revision decisions are not yet persisted, so do not offer accept or edit actions that
+imply a recorded state change.
+
 ## Confirm an edit
 
 `record-decision` rebuilds the deterministic review file automatically. After an edit,

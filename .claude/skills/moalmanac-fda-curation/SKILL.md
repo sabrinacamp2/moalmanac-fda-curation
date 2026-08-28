@@ -5,9 +5,10 @@ description: Determine whether an FDA oncology application needs first-time or u
 
 # Curate an FDA label for MOAlmanac
 
-Use the pipeline for extraction, generation, matching, validation, and state changes.
-Use the harness to route the session, present evidence, assess proposals, and obtain
-explicit curator decisions.
+Use the CLI for all extraction, matching, validation, proposal generation, and state
+changes. This skill coordinates those commands, routes from their outputs, presents
+review files, and obtains explicit curator decisions. Use a harness assessment only as
+an optional second check of curator-facing evidence.
 
 ## Protect source and generated output
 
@@ -16,8 +17,7 @@ explicit curator decisions.
 - Never infer approval from silence or successful execution.
 - Use `record-decision` for supported state changes; do not write decision files manually.
 - Explain what `--overwrite` will regenerate and obtain confirmation first.
-- Never replace the selected label version or use openFDA label text as a fallback.
-- Do not treat `not_found` as proof that an FDA indication was removed.
+- Never replace the selected label version or substitute a different source.
 
 ## Start and route every session
 
@@ -81,10 +81,10 @@ explanation at a curator boundary, before overwrite, or when scope or cost chang
 
 ## Stop conditions
 
-Stop rather than improvise when source extraction is unusable, a proposal lacks source
-support, historical coverage is incomplete, an approval event fails verification, an
-identity or revision result is unverified, or decisions are stale relative to source
-hashes.
+Stop when a command reports an unresolved condition or produces a curator-review file.
+Do not reproduce or independently reimplement the command's validation logic in the
+skill. If useful, add a clearly labeled harness assessment of the generated review
+evidence without treating it as pipeline state.
 
 First-time curation and the new-indication portion of an update support recorded review
 decisions. Update-specific revision decisions and reviewed update assembly do not yet

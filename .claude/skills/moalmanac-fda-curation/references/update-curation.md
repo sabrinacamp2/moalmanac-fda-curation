@@ -1,28 +1,12 @@
-# Newer-label update analysis
+# Newer-label update curation
 
-Use this procedure only after preflight reports both `previously_curated: true` and
+Use this procedure only when preflight reports both `previously_curated: true` and
 `newer_label_available: true`.
 
-Follow the phases below in order. Finish the new-indication phase before introducing
-revision analysis. New indications can use the existing indication review and decision
-workflow, but revision proposals and final update assembly remain analysis-only.
+## Check for new indications
 
-## Introduce the update
-
-Use a conversational transition based on the preflight result:
-
-1. “We last curated this drug on CURATED_LABEL_DATE.”
-2. “Let's check whether FDA has published a newer approved label.”
-3. If one exists, report its date and say: “There is a newer label. Let's first see
-   whether it contains any new indications.”
-
-Convey this meaning naturally; do not expose raw preflight JSON unless the curator asks.
-
-## Find and curate new indications first
-
-Explain that one preparation step will retrieve and extract the newer label, compare its
-indications with the existing MOAlmanac indications, and create a local Markdown review;
-it will not modify `moalmanac-db`. Then run:
+Tell the curator when the application was last curated, report the newer label date,
+and explain that new indications will be checked first. Then run:
 
 ```bash
 moalmanac-fda-curation prepare-update-indication-review \
@@ -31,73 +15,52 @@ moalmanac-fda-curation prepare-update-indication-review \
   --work-dir RUN_DIR
 ```
 
-The command derives the brand and generated filenames internally. Do not search for
-either. It loads the project's `.env` through the CLI, so do not source the API key in a
-separate shell command. Keep the default biomarker-only scope unless the curator
-explicitly expands it.
+Route from the command output:
 
-After it completes, route from its counts without asking the curator to review successful
-matches:
+- If it prints a reconciliation exception review, link that file and stop for curator
+  input.
+- If it prints new indication indexes, prepare and review those indexes using the
+  indication-level steps in [new-curation.md#review-vertically](new-curation.md#review-vertically).
+- If it reports no new indications or after their review is complete, continue to the
+  revision phase.
 
-- If `not_found` or `uncertain` is nonzero, link
-  `review/reconciliation-exceptions.md` and stop for curator review.
-- If new candidates exist and there are no exceptions, begin their indication-level
-  curation using the printed indexes.
-- If there are no new candidates or exceptions, proceed directly to revision analysis.
+Do not ask the curator to review successful indication matches. Do not repeat document
+review or run new-entry assembly during an update session.
 
-The complete mapping remains in `intermediate/indication-reconciliation.json` for
-provenance, but do not present it as a required review surface.
+## Review flagged revisions
 
-Interpret the groups as follows:
+Tell the curator that existing indications will now be checked for revisions. Run:
 
-- `matched`: eligible for revision assessment; it is not automatically unchanged.
-- `new`: a candidate for the first-time indication workflow.
-- `not_found`: a possible extraction miss, label omission, removal, merge, or scope
-  mismatch; flag it for curator investigation and never call it removed.
-- `uncertain`: stop automated routing for the affected records and ask the curator to
-  inspect the identity evidence.
+```bash
+moalmanac-fda-curation prepare-label-history \
+  --work-dir RUN_DIR
+```
 
-Do not begin revision assessment while new indications or exceptions remain. If one or
-more mappings are `new`, use their printed stable indexes and complete the workflow in
-[new-curation.md#review-vertically](new-curation.md#review-vertically), including
-description and approval review, before continuing. Do not repeat document review or
-assemble a duplicate document record.
+Use the cache and changelog paths printed by that command, together with the preflight
+metadata, to run:
 
-If no new indications are found, say so plainly and continue. Resolve or explicitly
-defer `not_found` and `uncertain` exceptions before continuing; do not let them silently
-disappear and do not call them removed.
+```bash
+moalmanac-fda-curation prepare-revision-review \
+  --existing-indications-json MOALMANAC_DB_ROOT/referenced/indications.json \
+  --document-id DOCUMENT_ID \
+  --section-cache-json PRINTED_CACHE_PATH \
+  --changelog-json PRINTED_CHANGELOG_PATH \
+  --baseline-label-url CURATED_LABEL_URL \
+  --latest-label-url LATEST_LABEL_URL \
+  --baseline-label-date CURATED_LABEL_DATE \
+  --latest-label-date LATEST_LABEL_DATE \
+  --work-dir RUN_DIR
+```
 
-## Then assess previously curated indications
+Route from the command output:
 
-Only after the new-indication phase is complete, transition with: “Now let's see whether
-any indications we already curated were modified in the newer label.”
+- If it reports no flagged revisions, tell the curator and stop.
+- Link only the Markdown files printed for flagged revisions, one at a time.
+- If approval evidence is unresolved, describe that revision as incomplete.
+- Do not present unchanged indications unless the curator asks.
 
-Run `prepare-label-history --work-dir RUN_DIR`. It will reuse history created during new
-indication approval review when available. Use the exact cache path printed by the
-command as `--section-cache-json`; do not search for or reverse-engineer its filename.
-Confirm the cache contains both baseline and latest label URLs, and stop if historical
-coverage is incomplete.
-
-Run `assess-revised-indications` with the exact curated baseline URL and latest URL.
-Require `verified: true`. Review every assessment, including `not_revised`, because
-verification establishes coverage rather than clinical correctness.
-
-Run `propose-revised-indications` only after the revision assessment is verified. A
-proposal is a minimal, allow-listed patch to an existing indication; it is not an
-accepted change.
-
-Present links to the assessment and proposal JSON artifacts with a concise harness
-assessment. Because curator-facing revision Markdown and revision decision commands do
-not exist yet, do not offer accept/edit choices that imply persistence. Instead ask the
-curator to inspect, question, or flag individual results. Do not send `not_found` or
-`uncertain` records into revision proposal generation.
-
-Conclude with three separate summaries:
-
-1. new indication candidates;
-2. revised indication proposals; and
-3. `not_found` or `uncertain` records requiring investigation.
-
-Distinguish reviewed new-indication decisions from revision analysis. State explicitly
-that the session still awaits an update-specific assembler and that revision proposals
-have not been accepted.
+An optional harness assessment may comment on whether the proposal appears supported by
+the review file. Do not repeat the file's exact diff or proposal in chat. Revision
+decisions and update assembly are not yet persisted, so ask the curator to inspect,
+question, or flag the proposal rather than offering an accept/edit action that implies a
+recorded decision.

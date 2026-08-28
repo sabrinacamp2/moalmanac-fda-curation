@@ -120,12 +120,7 @@ moalmanac-fda-curation prepare-update-indication-review \
 Successful matches require no separate review. The command writes
 `review/reconciliation-exceptions.md` only when a mapping is `not_found` or `uncertain`;
 stop for curator review in that case. Otherwise, curate any printed new-indication
-indexes, or proceed directly to revision analysis when there are none. The full mapping
-is retained in `intermediate/indication-reconciliation.json` for provenance.
-
-By default, reconciliation includes only latest-label candidates with a biomarker. Use
-`--include-non-biomarker` only when the scope requires those indications. `not_found`
-and `uncertain` are review flags, not evidence that an FDA indication was removed.
+indexes, or proceed directly to revision analysis when there are none.
 
 Assess revisions using the cached Indications and Usage text for the curated baseline
 and latest label:
@@ -134,26 +129,21 @@ and latest label:
 moalmanac-fda-curation prepare-label-history \
   --work-dir RUN_DIR
 
-moalmanac-fda-curation assess-revised-indications \
+moalmanac-fda-curation prepare-revision-review \
   --existing-indications-json MOALMANAC_DB_ROOT/referenced/indications.json \
   --document-id doc:fda.example \
   --section-cache-json CACHE_PATH_PRINTED_BY_PREPARE_LABEL_HISTORY \
+  --changelog-json CHANGELOG_PATH_PRINTED_BY_PREPARE_LABEL_HISTORY \
   --baseline-label-url BASELINE_FDA_LABEL_URL \
   --latest-label-url LATEST_FDA_LABEL_URL \
-  --output-json RUN_DIR/intermediate/revision-assessment.json
+  --baseline-label-date BASELINE_LABEL_DATE \
+  --latest-label-date LATEST_LABEL_DATE \
+  --work-dir RUN_DIR
 ```
 
-The assessment artifact contains the deterministic diff hunks used as evidence. Generate
-minimal patches only from a verified assessment:
-
-```bash
-moalmanac-fda-curation propose-revised-indications \
-  --assessment-json RUN_DIR/intermediate/revision-assessment.json \
-  --output-json RUN_DIR/intermediate/revision-proposals.json
-```
-
-These commands create analysis artifacts, not curator decisions or database edits. They
-refuse to replace an existing output unless `--overwrite` is supplied.
+The command prints one Markdown path per flagged revision and reports whether any
+approval evidence remains unresolved. Link only those flagged-review files. Its JSON
+artifacts remain under `intermediate/`; do not present them unless requested.
 
 The tool chooses stable filenames:
 
@@ -205,11 +195,3 @@ curator approval.
 
 After recording an edit, show only the resolved edited field/value from the rebuilt
 review packet in chat and obtain confirmation before continuing.
-
-## Dependency behavior
-
-- A selected-label or application change stales all downstream artifacts.
-- A meaningful indication edit stales its description and approval decision.
-- Excluded indications receive no further review or assembly.
-- A description edit does not stale the indication or approval evidence.
-- An approval edit does not require regenerating extraction or description artifacts.

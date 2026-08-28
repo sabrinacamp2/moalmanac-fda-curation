@@ -11,6 +11,7 @@ from moalmanac_fda_curation.workflows import (
     assess_revisions,
     check_preflight,
     prepare_label_history,
+    prepare_revision_review,
     prepare_update_indications,
     propose_revisions,
     reconcile_indications,
@@ -25,6 +26,7 @@ class UpdateCliTest(unittest.TestCase):
         self.assertIn("prepare-label-history", usage)
         self.assertIn("prepare-update-indication-review", usage)
         self.assertIn("assess-revised-indications", usage)
+        self.assertIn("prepare-revision-review", usage)
         self.assertIn("propose-revised-indications", usage)
 
     def test_preflight_writes_an_artifact(self) -> None:
@@ -362,6 +364,159 @@ class UpdateCliTest(unittest.TestCase):
                 self.assertEqual(propose_revisions.main(), 0)
             self.assertEqual(propose.call_count, 1)
             self.assertEqual(json.loads(output.read_text())["proposals"], [proposal])
+
+    def test_revision_markdown_shows_exact_words_and_only_proposed_fields(self) -> None:
+        existing = {
+            "id": "ind:fda.opdivo:1",
+            "indication": "Use an FDA-approved test.",
+            "description": "Existing description.",
+        }
+        assessment = {
+            "existing_indication_id": existing["id"],
+            "status": "revised",
+            "changes": ["Test designation changed."],
+            "reason": "The cited hunk changes the test designation.",
+            "existing_indication": existing,
+            "relevant_hunks": [{
+                "hunk_id": "hunk-1",
+                "baseline_text": "Use an FDA-approved test.",
+                "latest_text": "Use an FDA-authorized test.",
+            }],
+        }
+        proposal = {
+            "existing_indication_id": existing["id"],
+            "changes": {"indication": "Use an FDA-authorized test."},
+        }
+        markdown = prepare_revision_review.revision_markdown(
+            assessment,
+            proposal,
+            baseline_label_url="https://example.test/old.pdf",
+            latest_label_url="https://example.test/new.pdf",
+            baseline_label_date="2025-04-11",
+            latest_label_date="2026-08-12",
+            assessment_path=Path("/tmp/assessment.json"),
+            proposals_path=Path("/tmp/proposals.json"),
+        )
+        self.assertIn("Removed: `FDA-approved`", markdown)
+        self.assertIn("Added: `FDA-authorized`", markdown)
+        self.assertIn("- Use an FDA-approved test.", markdown)
+        self.assertIn("+ Use an FDA-authorized test.", markdown)
+        self.assertIn("### `indication`", markdown)
+        self.assertNotIn("### `description`", markdown)
+
+    def test_combined_revision_review_omits_unchanged_indications(self) -> None:
+        revised = {
+            "existing_indication_id": "ind:revised",
+            "status": "revised",
+            "relevant_hunk_ids": ["hunk-1"],
+            "changes": ["Changed wording."],
+            "reason": "Source changed.",
+            "existing_indication": {
+                "id": "ind:revised",
+                "indication": "Old wording",
+            },
+            "relevant_hunks": [{
+                "hunk_id": "hunk-1",
+                "baseline_text": "Old wording",
+                "latest_text": "New wording",
+            }],
+        }
+        unchanged = {
+            "existing_indication_id": "ind:unchanged",
+            "status": "not_revised",
+            "relevant_hunk_ids": [],
+            "changes": [],
+            "reason": "No relevant diff.",
+            "existing_indication": {
+                "id": "ind:unchanged",
+                "indication": "Unchanged wording",
+            },
+            "relevant_hunks": [],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            intermediate = root / "intermediate"
+            intermediate.mkdir()
+            (intermediate / "revision-assessment.json").write_text(json.dumps({
+                "verified": True,
+                "document_id": "doc:1",
+                "diff_hunks": revised["relevant_hunks"],
+                "assessments": [revised, unchanged],
+            }))
+            argv = [
+                "prepare-revision-review",
+                "--existing-indications-json", str(root / "unused.json"),
+                "--document-id", "doc:1",
+                "--section-cache-json", str(root / "unused-cache.json"),
+                "--changelog-json", str(root / "unused-changelog.json"),
+                "--baseline-label-url", "https://example.test/old.pdf",
+                "--latest-label-url", "https://example.test/new.pdf",
+                "--baseline-label-date", "2025-04-11",
+                "--latest-label-date", "2026-08-12",
+                "--work-dir", str(root),
+            ]
+            proposal = {
+                "existing_indication_id": "ind:revised",
+                "changes": {"indication": "New wording"},
+                "proposed_indication": {"id": "ind:revised", "indication": "New wording"},
+            }
+            date_matches = [{
+                "indication_index": 0,
+                "verification": {
+                    "verified": True,
+                    "matched_event": {
+                        "date": "2026-08-12",
+                        "label_url": "https://example.test/new.pdf",
+                    },
+                },
+            }]
+            with patch("sys.argv", argv), patch.object(
+                prepare_revision_review,
+                "propose_revised_indication",
+                return_value=proposal,
+            ) as propose, patch.object(
+                prepare_revision_review,
+                "load_changelog_payload",
+                return_value={"events": []},
+            ), patch.object(
+                prepare_revision_review,
+                "revision_date_matches",
+                return_value=date_matches,
+            ):
+                self.assertEqual(prepare_revision_review.main(), 0)
+            self.assertEqual(propose.call_count, 1)
+            reviews = list((root / "review" / "revisions").glob("*.md"))
+            self.assertEqual(len(reviews), 1)
+            self.assertIn("ind:revised", reviews[0].read_text())
+            self.assertNotIn("ind:unchanged", reviews[0].read_text())
+            candidates = json.loads(
+                (intermediate / "revision-indications.proposal.json").read_text()
+            )
+            self.assertEqual(
+                candidates[0]["initial_approval_date"],
+                "2026-08-12",
+            )
+            self.assertEqual(
+                candidates[0]["initial_approval_url"],
+                "https://example.test/new.pdf",
+            )
+
+    def test_bounded_changelog_filters_dates_and_renumbers_events(self) -> None:
+        payload = {"events": [
+            {"event_number": 4, "date": "2025-01-01"},
+            {"event_number": 5, "date": "2025-04-11"},
+            {"event_number": 8, "date": "2026-08-12"},
+            {"event_number": 9, "date": "2026-09-01"},
+        ]}
+        bounded = prepare_revision_review.bounded_changelog(
+            payload, "2025-04-11", "2026-08-12"
+        )
+        self.assertEqual(
+            [item["event_number"] for item in bounded["events"]], [1, 2]
+        )
+        self.assertEqual(
+            [item["original_event_number"] for item in bounded["events"]], [5, 8]
+        )
 
     def test_commands_refuse_to_replace_artifacts_without_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -85,6 +85,8 @@ based on its assessed changes between the baseline and current FDA labels.
 - The assessed `changes` define the complete scope of this proposal. Update only
   content needed to apply those changes to the target indication.
 - Use `latest_text` in the cited hunks as the source for current wording.
+- Preserve existing drug-class wording; it may come from FDA Highlights and need not be
+  repeated in the cited `latest_text` hunk.
 - A hunk may contain other indications. Treat their wording as context only and do
   not add it to this indication.
 - Update `description` only as needed to reflect the assessed changes; preserve

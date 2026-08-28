@@ -161,7 +161,10 @@ def write_bytes(path: Path, content: bytes, overwrite: bool = False) -> Path:
 
 def heading_pattern(heading: str) -> str:
     """Build a heading regex that tolerates converted-PDF spacing differences."""
-    escaped_words = [re.escape(word) for word in heading.split()]
+    words = heading.split()
+    escaped_words = [re.escape(word) for word in words]
+    if words and words[0].isdigit():
+        escaped_words[0] += r"\.?"
     return r"[ \t]+".join(escaped_words)
 
 

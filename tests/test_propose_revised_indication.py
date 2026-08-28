@@ -41,6 +41,7 @@ class ProposeRevisedIndicationTest(unittest.TestCase):
         self.assertIn("The test designation changed", prompt)
         self.assertIn("FDA-authorized test", prompt)
         self.assertIn("A hunk may contain other indications", prompt)
+        self.assertIn("Preserve existing drug-class wording", prompt)
         self.assertNotIn("initial_approval_date", prompt)
 
     def test_applies_proposal_and_preserves_provenance(self) -> None:
@@ -87,7 +88,6 @@ class ProposeRevisedIndicationTest(unittest.TestCase):
         )
         self.assertEqual(result["changes"], {})
         self.assertEqual(result["proposed_indication"], self.existing)
-
 
 if __name__ == "__main__":
     unittest.main()

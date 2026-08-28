@@ -15,6 +15,7 @@ from .workflows import (
     extract_candidates,
     prepare_document,
     prepare_label_history,
+    prepare_revision_review,
     prepare_selected,
     prepare_update_indications,
     propose_revisions,
@@ -54,6 +55,10 @@ COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
     "assess-revised-indications": (
         "Identify existing indications revised between two FDA labels",
         assess_revisions.main,
+    ),
+    "prepare-revision-review": (
+        "Assess revisions and create reviews only for flagged indications",
+        prepare_revision_review.main,
     ),
     "propose-revised-indications": (
         "Propose minimal patches for verified revised indications",
