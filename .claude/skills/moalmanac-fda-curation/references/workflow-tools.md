@@ -115,10 +115,11 @@ moalmanac-fda-curation find-new-indications \
   --work-dir RUN_DIR
 ```
 
-Successful matches require no separate review. The command writes
-`review/reconciliation-exceptions.md` only when a mapping is `not_found` or `uncertain`;
-stop for curator review in that case. Otherwise, curate any printed new-indication
-indexes, or proceed directly to revision analysis when there are none.
+Successful matches require no separate review. When an existing indication is not found
+or cannot be matched confidently, the command writes
+`review/indication-match-review.md`; stop for curator review in that case. Otherwise,
+curate any printed new-indication indexes, or proceed directly to revision analysis when
+there are none.
 
 Find revisions and create reviews for flagged indications in one command:
 

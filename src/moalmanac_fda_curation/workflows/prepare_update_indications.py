@@ -163,7 +163,7 @@ def new_indication_review_markdown(
     return "\n".join(lines)
 
 
-def exception_review_markdown(
+def match_review_markdown(
     preflight: dict[str, Any],
     reconciliation: dict[str, Any],
     *,
@@ -172,7 +172,7 @@ def exception_review_markdown(
 ) -> str:
     groups = mapping_groups(reconciliation)
     lines = [
-        "# Indication reconciliation exceptions",
+        "# Indications needing match review",
         "",
         f"- Application: {preflight['application_number']}",
         f"- MOAlmanac curated label date: {preflight['curated_label_date']}",
@@ -225,7 +225,7 @@ def main() -> int:
     review_dir = work_dir / "review"
     preflight_path = intermediate / "curation-status.json"
     reconciliation_path = intermediate / "indication-reconciliation.json"
-    review_path = review_dir / "reconciliation-exceptions.md"
+    review_path = review_dir / "indication-match-review.md"
     new_review_path = review_dir / "new-indications.md"
 
     preflight = check_curation_preflight(
@@ -318,7 +318,7 @@ def main() -> int:
     groups = mapping_groups(reconciliation)
     exceptions = groups["not_found"] + groups["uncertain"]
     if exceptions:
-        markdown = exception_review_markdown(
+        markdown = match_review_markdown(
             preflight,
             reconciliation,
             reconciliation_path=reconciliation_path,
@@ -327,15 +327,15 @@ def main() -> int:
         if review_path.exists() and not args.overwrite:
             if review_path.read_text(encoding="utf-8") != markdown:
                 raise FileExistsError(
-                    f"Exception review exists with different content: {review_path}"
+                    f"Indication match review exists with different content: {review_path}"
                 )
         else:
             review_path.parent.mkdir(parents=True, exist_ok=True)
             review_path.write_text(markdown, encoding="utf-8")
-        print(f"Reconciliation exception review: {review_path}")
+        print(f"Indications needing match review: {review_path}")
         print("Curator review required before continuing.")
     else:
-        print("Reconciliation exceptions: none")
+        print("All existing indications matched confidently.")
     if groups["new"]:
         new_review = new_indication_review_markdown(
             preflight,

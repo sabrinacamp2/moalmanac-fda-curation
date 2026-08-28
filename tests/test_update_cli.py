@@ -191,7 +191,7 @@ class UpdateCliTest(unittest.TestCase):
                 self.assertEqual(prepare_label_history.main(), 0)
             build_again.assert_not_called()
 
-    def test_exception_review_markdown_only_surfaces_unresolved_mappings(self) -> None:
+    def test_match_review_markdown_only_surfaces_unresolved_mappings(self) -> None:
         preflight = {
             "application_number": "BLA125554",
             "curated_label_date": "2025-04-11",
@@ -212,7 +212,7 @@ class UpdateCliTest(unittest.TestCase):
                 },
             ],
         }
-        markdown = prepare_update_indications.exception_review_markdown(
+        markdown = prepare_update_indications.match_review_markdown(
             preflight,
             reconciliation,
             reconciliation_path=Path("/tmp/reconciliation.json"),
@@ -307,14 +307,14 @@ class UpdateCliTest(unittest.TestCase):
             ):
                 self.assertEqual(prepare_update_indications.main(), 0)
 
-            review = work_dir / "review" / "reconciliation-exceptions.md"
+            review = work_dir / "review" / "indication-match-review.md"
             self.assertFalse(review.exists())
             reconciliation_path = (
                 work_dir / "intermediate" / "indication-reconciliation.json"
             )
             self.assertTrue(reconciliation_path.is_file())
 
-    def test_combined_update_command_writes_review_for_exceptions(self) -> None:
+    def test_combined_update_command_writes_review_for_unresolved_matches(self) -> None:
         preflight = {
             "application_number": "BLA125554",
             "curated_label_date": "2025-04-11",
@@ -329,7 +329,7 @@ class UpdateCliTest(unittest.TestCase):
                 "reason": "Possible split.",
             }],
         }
-        markdown = prepare_update_indications.exception_review_markdown(
+        markdown = prepare_update_indications.match_review_markdown(
             preflight,
             reconciliation,
             reconciliation_path=Path("/tmp/reconciliation.json"),
@@ -524,12 +524,12 @@ class UpdateCliTest(unittest.TestCase):
             assessment_path=Path("/tmp/assessment.json"),
             proposals_path=Path("/tmp/proposals.json"),
         )
-        self.assertIn("Removed: `FDA-approved`", markdown)
-        self.assertIn("Added: `FDA-authorized`", markdown)
-        self.assertIn("- Use an FDA-approved test.", markdown)
-        self.assertIn("+ Use an FDA-authorized test.", markdown)
+        self.assertIn("`FDA-approved` → `FDA-authorized`", markdown)
+        self.assertIn("MOAlmanac update proposed: yes", markdown)
         self.assertIn("### `indication`", markdown)
         self.assertNotIn("### `description`", markdown)
+        self.assertNotIn("Full proposed indication record", markdown)
+        self.assertNotIn("```diff", markdown)
 
     def test_combined_revision_review_omits_unchanged_indications(self) -> None:
         revised = {

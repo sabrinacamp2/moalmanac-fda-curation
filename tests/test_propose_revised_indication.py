@@ -40,8 +40,11 @@ class ProposeRevisedIndicationTest(unittest.TestCase):
         )
         self.assertIn("The test designation changed", prompt)
         self.assertIn("FDA-authorized test", prompt)
-        self.assertIn("A hunk may contain other indications", prompt)
+        self.assertIn("A changed passage may contain other indications", prompt)
         self.assertIn("Preserve existing drug-class wording", prompt)
+        self.assertIn("inspect `description` for the same affected wording", prompt)
+        self.assertIn("meaning. Update corresponding language", prompt)
+        self.assertIn("population, biomarker, treatment, or setting", prompt)
         self.assertNotIn("initial_approval_date", prompt)
 
     def test_applies_proposal_and_preserves_provenance(self) -> None:

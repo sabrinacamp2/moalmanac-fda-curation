@@ -5,8 +5,7 @@ Use this procedure only when the curation status reports both `previously_curate
 
 ## Check for new indications
 
-Continue from the curation-status summary by saying: “First, we'll see if the newer
-label contains any new indications.” Then run:
+Continue by saying: “We'll start with new indications.” Then run:
 
 ```bash
 moalmanac-fda-curation find-new-indications \
@@ -17,8 +16,7 @@ moalmanac-fda-curation find-new-indications \
 
 Route from the command output:
 
-- If it prints a reconciliation exception review, link that file and stop for curator
-  input.
+- If it prints an indication match review, link that file and stop for curator input.
 - Link the printed new-indication review and summarize the reported biomarker status.
   Present indications outside biomarker scope as findings and the biomarker-bearing
   subset as curation candidates.

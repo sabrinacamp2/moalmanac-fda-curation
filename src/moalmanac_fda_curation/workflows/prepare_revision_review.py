@@ -76,15 +76,6 @@ def changed_phrases(baseline: str, latest: str) -> list[dict[str, str | None]]:
     return changes
 
 
-def diff_block(baseline: str | None, latest: str | None) -> list[str]:
-    lines = []
-    for line in (baseline or "").splitlines() or [""]:
-        lines.append(f"- {line}")
-    for line in (latest or "").splitlines() or [""]:
-        lines.append(f"+ {line}")
-    return lines
-
-
 def bounded_changelog(
     payload: dict[str, Any], baseline_date: str, latest_date: str
 ) -> dict[str, Any]:
@@ -220,99 +211,87 @@ def revision_markdown(
     candidates_path: Path | None = None,
 ) -> str:
     existing = assessment["existing_indication"]
-    hunks = assessment.get("relevant_hunks") or []
+    changes = proposal.get("changes") or {}
+    display_name = existing.get("raw_cancer_type") or assessment["existing_indication_id"]
     lines = [
-        f"# Revision review — {assessment['existing_indication_id']}",
+        f"# Revision review — {display_name}",
         "",
-        "## Pipeline assessment — model generated",
+        f"- Indication ID: `{assessment['existing_indication_id']}`",
         "",
-        f"- Reason: {assessment.get('reason') or 'Not provided'}",
-        *(f"- Change: {change}" for change in assessment.get("changes") or []),
+        "## Result",
         "",
-        "## Exact words changed — deterministic",
-        "",
+        f"- MOAlmanac update proposed: {'yes' if changes else 'no'}",
+        f"- Fields affected: {', '.join(f'`{field}`' for field in changes) if changes else 'none'}",
+        "- Label changes: "
+        + "; ".join(assessment.get("changes") or ["Not provided"]),
     ]
-    phrase_number = 0
-    for hunk in hunks:
-        for change in changed_phrases(
-            hunk.get("baseline_text") or "", hunk.get("latest_text") or ""
-        ):
-            phrase_number += 1
+    if not changes:
+        lines.extend(
+            [
+                "",
+                "The FDA label changed, but the changed wording is not represented in",
+                "this MOAlmanac indication record.",
+                "",
+            ]
+        )
+    else:
+        lines.extend(["", "## Proposed field changes", ""])
+    for field, new_value in changes.items():
+        lines.extend([f"### `{field}`", ""])
+        old_value = existing.get(field)
+        field_phrases = (
+            changed_phrases(old_value, new_value)
+            if isinstance(old_value, str) and isinstance(new_value, str)
+            else []
+        )
+        if field_phrases:
+            for phrase in field_phrases:
+                lines.append(
+                    f"- `{phrase['removed'] or '∅'}` → `{phrase['added'] or '∅'}`"
+                )
+        else:
             lines.extend(
                 [
-                    f"### Change {phrase_number}",
-                    "",
-                    f"- Removed: `{change['removed'] or '∅'}`",
-                    f"- Added: `{change['added'] or '∅'}`",
-                    "",
+                    f"- Existing: `{json.dumps(old_value, ensure_ascii=False)}`",
+                    f"- Proposed: `{json.dumps(new_value, ensure_ascii=False)}`",
                 ]
             )
-    if phrase_number == 0:
-        lines.extend(["No word-level change could be isolated.", ""])
+        lines.append("")
 
-    lines.extend(["## Proposed MOAlmanac patch — model generated", ""])
-    changes = proposal.get("changes") or {}
-    if not changes:
-        lines.extend(["No field update was proposed.", ""])
-    for field, new_value in changes.items():
-        lines.extend(
-            [
-                f"### `{field}`",
-                "",
-                "Existing:",
-                "",
-                "```json",
-                json.dumps(existing.get(field), ensure_ascii=False, indent=2),
-                "```",
-                "",
-                "Proposed:",
-                "",
-                "```json",
-                json.dumps(new_value, ensure_ascii=False, indent=2),
-                "```",
-                "",
-            ]
-        )
-
+    revision_event: dict[str, Any] = {}
     if candidate is not None:
-        proposed = candidate["proposed_indication"]
-        lines.extend(
-            [
-                "## Approval provenance — deterministically verified matcher result",
-                "",
-                f"- Complete: {'yes' if candidate.get('complete') else 'no'}",
-                f"- Existing initial approval date: {existing.get('initial_approval_date') or 'Not available'}",
-                f"- Existing initial approval URL: {existing.get('initial_approval_url') or 'Not available'}",
-                f"- Proposed initial approval date: {proposed.get('initial_approval_date') or 'Unresolved'}",
-                f"- Proposed initial approval URL: {proposed.get('initial_approval_url') or 'Unresolved'}",
-                "",
-                "## Full proposed indication record",
-                "",
-                "```json",
-                json.dumps(proposed, ensure_ascii=False, indent=2),
-                "```",
-                "",
-            ]
+        revision_event = (
+            ((candidate.get("date_match") or {}).get("verification") or {}).get(
+                "matched_event"
+            )
+            or {}
         )
 
-    lines.extend(["## FDA source — exact label wording changes", ""])
-    for passage_number, hunk in enumerate(hunks, start=1):
-        lines.extend(
-            [
-                f"### Changed passage {passage_number}",
-                "",
-                "```diff",
-                *diff_block(hunk.get("baseline_text"), hunk.get("latest_text")),
-                "```",
-                "",
-            ]
-        )
+    original_date = existing.get("initial_approval_date") or "Not available"
+    original_url = existing.get("initial_approval_url")
+    original_display = f"[{original_date}](<{original_url}>)" if original_url else original_date
+    revision_date = revision_event.get("date")
+    revision_url = revision_event.get("label_url")
+    revision_display = (
+        f"[{revision_date}](<{revision_url}>)"
+        if revision_date and revision_url
+        else "Unresolved"
+    )
+    lines.extend(
+        [
+            "## Dates",
+            "",
+            f"- Original indication approval: {original_display}",
+            f"- Revised wording first appeared: {revision_display}",
+            "",
+        ]
+    )
 
     baseline_label = baseline_label_date or "curated baseline label"
     latest_label = latest_label_date or "latest label"
     lines.extend(
         [
-            "## Source labels and artifacts",
+            "## Sources",
             "",
             f"- [Baseline FDA label — {baseline_label}](<{baseline_label_url}>)",
             f"- [Latest FDA label — {latest_label}](<{latest_label_url}>)",

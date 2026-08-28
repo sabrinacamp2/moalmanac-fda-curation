@@ -118,8 +118,8 @@ indications unless the curator asks for the audit result.
 ```markdown
 [Open the flagged revision](<absolute-path-to-review/revisions/<indication-id>.md>)
 
-**Harness assessment:** <Assess whether the exact FDA wording change supports the
-proposed field patch. Do not repeat the diff or unchanged indication list in chat.>
+**Harness assessment:** <Assess whether the concise field changes are supported by the
+linked source artifacts.>
 
 1. Inspect or question the proposed revision
 2. Inspect more source context
@@ -128,6 +128,10 @@ proposed field patch. Do not repeat the diff or unchanged indication list in cha
 
 Revision decisions are not yet persisted, so do not offer accept or edit actions that
 imply a recorded state change.
+
+The review leads with whether a MOAlmanac update is proposed, lists only affected fields
+and their changed phrases, distinguishes original approval from when the revised wording
+first appeared, and links to full JSON evidence for deeper inspection.
 
 ## Confirm an edit
 

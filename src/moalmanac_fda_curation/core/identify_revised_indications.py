@@ -113,8 +113,8 @@ Determine which existing curated MOAlmanac FDA indications were revised between
 two versions of the label's Indications and Usage section.
 
 The label changes below were generated deterministically from the source label text.
-Use them as the only evidence of label changes. Associate changes with an existing
-indication only when the hunk applies to that indication. A new indication or a
+Use them as the only evidence of label changes. Associate a changed passage with an
+existing indication only when it applies to that indication. A new indication or a
 change concerning a different indication is not evidence that the target changed.
 
 # Existing indications
@@ -131,18 +131,22 @@ change concerning a different indication is not evidence that the target changed
 
 # Statuses
 
-- `revised`: one or more label changes modify or further specify the target indication.
-- `not_revised`: none of the label changes modify or further specify the target.
+- `revised`: one or more changed passages alter text associated with the target
+  indication.
+- `not_revised`: none of the changed passages alter text associated with the target.
 - `uncertain`: the supplied evidence does not support a confident determination.
 
 # Output rules
 
 - Return exactly one assessment for every existing indication.
-- For `revised`, cite every relevant hunk ID and tersely describe each change.
+- For `revised`, cite every relevant label-change ID and tersely describe each change.
 - For `not_revised`, return empty `relevant_hunk_ids` and `changes` lists.
-- Do not treat punctuation, capitalization, PDF line wrapping, abbreviation or
-  acronym expansion, harmless clause ordering, or semantically equivalent wording
-  as a revision.
+- Capture every target-specific source-text change, including punctuation, hyphenation,
+  capitalization, abbreviation, terminology, and semantically equivalent wording.
+- Describe the exact before-and-after wording without judging whether a change is minor,
+  clinically important, or actionable in MOAlmanac.
+- Treat PDF line wrapping and whitespace-only differences as extraction layout rather
+  than source-text changes.
 - Compare only what the source text explicitly states. Do not infer that an omitted
   qualification was already present merely because it may have been implied.
 - Do not use outside clinical knowledge."""

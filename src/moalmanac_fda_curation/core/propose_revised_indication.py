@@ -84,13 +84,15 @@ based on its assessed changes between the baseline and current FDA labels.
 
 - The assessed `changes` define the complete scope of this proposal. Update only
   content needed to apply those changes to the target indication.
-- Use `latest_text` in the cited hunks as the source for current wording.
+- Use `latest_text` in the cited label changes as the source for current wording.
 - Preserve existing drug-class wording; it may come from FDA Highlights and need not be
-  repeated in the cited `latest_text` hunk.
-- A hunk may contain other indications. Treat their wording as context only and do
-  not add it to this indication.
-- Update `description` only as needed to reflect the assessed changes; preserve
-  unrelated study, approval, and explanatory details already present.
+  repeated in the cited changed passage.
+- A changed passage may contain other indications. Treat their wording as context only
+  and apply only the changes associated with this indication.
+- When `indication` changes, inspect `description` for the same affected wording or
+  meaning. Update corresponding language wherever the description restates the affected
+  population, biomarker, treatment, or setting. Preserve unrelated study, approval, and
+  explanatory details already present.
 - Update raw fields only when an assessed change affects their content.
 - Omit every unchanged field from `updates`.
 - If the evidence is insufficient to propose a target-specific replacement, return
@@ -136,7 +138,7 @@ def propose_revised_indication(
     hunk_ids = revision_assessment.get("relevant_hunk_ids") or []
     changes_guidance = revision_assessment.get("changes") or []
     if not hunk_ids or not changes_guidance:
-        raise ValueError("A revised assessment requires hunk IDs and changes")
+        raise ValueError("A revised assessment requires label-change IDs and changes")
     hunks_by_id = {hunk.get("hunk_id"): hunk for hunk in diff_hunks}
     if None in hunks_by_id or len(hunks_by_id) != len(diff_hunks):
         raise ValueError("Label changes must have unique non-null IDs")

@@ -72,6 +72,9 @@ class IdentifyRevisedIndicationsTest(unittest.TestCase):
         )
         self.assertIn("generated deterministically from the source label text", prompt)
         self.assertIn("A new indication", prompt)
+        self.assertIn("including punctuation, hyphenation", prompt)
+        self.assertIn("without judging whether a change is minor", prompt)
+        self.assertIn("whitespace-only differences as extraction layout", prompt)
         self.assertNotIn("description", prompt)
 
 

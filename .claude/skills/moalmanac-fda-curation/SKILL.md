@@ -38,12 +38,14 @@ an optional second check of curator-facing evidence.
    using `RUN_DIR/intermediate/curation-status.json` for `--output-json`.
 5. Give one short curation-status summary. For an existing application, include the
    curated label date and either the newer FDA label date or that the curation is current.
-   Continue directly into the selected branch from that summary:
+   Treat branch references as internal guidance and continue the curator conversation:
    - `previously_curated: false`: read
      [references/new-curation.md](references/new-curation.md) and follow it.
    - `previously_curated: true` and `newer_label_available: false`: report that no
      newer approved label needs review and stop.
-   - `previously_curated: true` and `newer_label_available: true`: read
+   - `previously_curated: true` and `newer_label_available: true`: say, “Since we've
+     curated this drug before, let's see whether the newer label contains any new
+     indications or changes to existing ones.” Then read
      [references/update-curation.md](references/update-curation.md) and follow it.
 6. If the curation status is ambiguous or the command fails, stop rather than choosing a
    branch from filenames, drug names, or memory.

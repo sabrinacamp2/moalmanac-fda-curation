@@ -30,6 +30,11 @@ Prefer an exact conversational goal, action, or review boundary over adding list
 phrases and behaviors to avoid. Add a negative constraint only when a concrete safety or
 correctness boundary cannot be expressed clearly through positive, scoped guidance.
 
+Start with the simplest change that directly addresses the observed behavior. For
+model-generated content, first try a focused prompt or instruction adjustment and add a
+test for the intended guidance. Add deterministic transformations, validation layers,
+or new workflow machinery when evidence shows that the simpler change is insufficient.
+
 ## Do not preserve compatibility by default
 
 This repository is a pilot project without external users. Do not retain deprecated

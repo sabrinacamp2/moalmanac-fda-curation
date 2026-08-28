@@ -73,7 +73,7 @@ moalmanac-fda-curation find-new-indications \
 
 Successful matches are retained in JSON without requiring review. If any existing
 indication is not found or a mapping is uncertain, review
-`review/reconciliation-exceptions.md` before continuing. Otherwise, curate any new
+`review/indication-match-review.md` before continuing. Otherwise, curate any new
 indication indexes printed by the command and then proceed to revision analysis.
 
 Revision analysis uses `find-revised-indications`. It builds or reuses the required
