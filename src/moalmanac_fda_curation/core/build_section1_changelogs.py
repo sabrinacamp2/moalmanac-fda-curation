@@ -149,6 +149,7 @@ def section_1_snapshots(
     current_label_url: str | None,
     cache_dir: Path,
     historical_labels_dir: Path,
+    baseline_label_url: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Fetch/cache historical Section 1 snapshots for one application."""
     fda_record = fetch_fda_record(application_number)
@@ -164,6 +165,15 @@ def section_1_snapshots(
         for _, doc in relevant_label_docs
     ):
         relevant_label_docs.append(current_match)
+
+    baseline_match = (
+        current_label_match(label_docs, baseline_label_url) if baseline_label_url else None
+    )
+    if baseline_match and not any(
+        same_url(doc["url"], baseline_match[1]["url"])
+        for _, doc in relevant_label_docs
+    ):
+        relevant_label_docs.append(baseline_match)
 
     if current_status_date:
         relevant_label_docs = [
@@ -479,6 +489,7 @@ def build_changelog(
     output_dir: Path,
     cache_dir: Path,
     historical_labels_dir: Path,
+    baseline_label_url: str | None = None,
 ) -> tuple[Path, Path]:
     """Build and write one per-drug Section 1 changelog."""
     snapshots, skipped_labels = section_1_snapshots(
@@ -487,6 +498,7 @@ def build_changelog(
         current_label_url=current_label_url,
         cache_dir=cache_dir,
         historical_labels_dir=historical_labels_dir,
+        baseline_label_url=baseline_label_url,
     )
     events = section_1_changelog_events(snapshots)
     payload = section_1_changelog_payload(

@@ -42,7 +42,7 @@ def load_existing_indications(
 
 
 def indexed_latest_indications(
-    indication_payload: dict[str, Any], *, biomarker_only: bool = True
+    indication_payload: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Return latest candidates with stable extraction indexes."""
     indications = indication_payload.get("indications")
@@ -56,8 +56,6 @@ def indexed_latest_indications(
             indication.get("indication"), str
         ):
             raise ValueError(f"Latest indication {index} must have indication text")
-        if biomarker_only and not indication.get("raw_biomarkers"):
-            continue
         output.append({"latest_indication_index": index, **indication})
     return output
 
@@ -226,9 +224,9 @@ def map_existing_to_latest_indications(
 
 
 def select_new_indication_candidates(
-    mapping_result: dict[str, Any],
+    mapping_result: dict[str, Any], *, biomarker_only: bool = True
 ) -> list[dict[str, Any]]:
-    """Return hydrated latest-label records classified as new."""
+    """Return in-scope latest-label records classified as new."""
     if not mapping_result.get("verified"):
         raise ValueError("Cannot select new candidates from an unverified mapping")
     mappings = mapping_result.get("mappings")
@@ -243,6 +241,8 @@ def select_new_indication_candidates(
         latest = mapping.get("latest_indication")
         if not isinstance(latest, dict):
             raise ValueError(f"New mapping {index} is missing its latest indication")
+        if biomarker_only and not latest.get("raw_biomarkers"):
+            continue
         candidates.append(
             {
                 **latest,

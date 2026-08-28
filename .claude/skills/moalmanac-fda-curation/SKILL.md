@@ -30,18 +30,15 @@ an optional second check of curator-facing evidence.
 4. Ask the curator for the path to their local `moalmanac-db` repository. Do not infer
    its location or search for it. Validate the supplied path using
    [references/workflow-tools.md#locate-the-moalmanac-database](references/workflow-tools.md#locate-the-moalmanac-database).
-   Before running `check-curation-status`, explain in curator-facing language that
-   it will check whether the application already has an FDA document in MOAlmanac. If
-   it does, it will compare the date of the curated label with FDA's latest approved
-   label to determine whether this is an update session. It reads the database without
-   changing it and writes a local status artifact used to select the workflow. Do not
-   call this only a generic setup or preliminary check.
+   Before running `check-curation-status`, say: “I’ll check whether this application has
+   already been curated. If it has, I’ll compare the curated label with FDA’s latest
+   approved label to see whether we need to review a newer label or whether the curation
+   is already current.”
    Run `check-curation-status` before preparing a document or extracting indications,
-   and persist its result inside the run's `intermediate/` directory.
-5. Present the curation status as a short narrative rather than a status dump. For an
-   existing application, first say when MOAlmanac last curated it, then say that the
-   next step is checking for a newer approved label. Report the result and route exactly
-   once:
+   using `RUN_DIR/intermediate/curation-status.json` for `--output-json`.
+5. Give one short curation-status summary. For an existing application, include the
+   curated label date and either the newer FDA label date or that the curation is current.
+   Continue directly into the selected branch from that summary:
    - `previously_curated: false`: read
      [references/new-curation.md](references/new-curation.md) and follow it.
    - `previously_curated: true` and `newer_label_available: false`: report that no
@@ -72,10 +69,9 @@ harness can render the PDF.
 
 ## Explain before shell confirmation
 
-Before a meaningful command, explain the phase, what it will retrieve or generate,
-which artifact group it will write, and what the curator will review. Then submit the
-command so the shell-approval dialog provides confirmation. Do not ask a redundant
-conversational confirmation immediately beforehand.
+Before a meaningful command, explain its curator-facing purpose and what the curator
+will review. Mention a generated artifact when it is a review surface the curator will
+open. Then submit the command so the shell-approval dialog provides confirmation.
 
 Group uninterrupted internal pipeline work under one explanation. Give another
 explanation at a curator boundary, before overwrite, or when scope or cost changes.

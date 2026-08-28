@@ -34,6 +34,22 @@ def load_documents(documents_path: Path) -> list[dict[str, Any]]:
     return documents
 
 
+def resolve_curated_label_url(document: dict[str, Any], urls_path: Path) -> str:
+    """Return the concrete label URL referenced by a curated FDA document."""
+    label_ref = next(
+        (ref for ref in document.get("urls", []) if str(ref).endswith(":label")),
+        None,
+    )
+    if label_ref is None:
+        raise ValueError(f"{document.get('id')} does not reference a label URL")
+    with urls_path.open(encoding="utf-8") as file:
+        urls = json.load(file)
+    url_by_id = {entry["id"]: entry["url"] for entry in urls}
+    if label_ref not in url_by_id:
+        raise ValueError(f"{urls_path} does not define {label_ref!r}")
+    return url_by_id[label_ref]
+
+
 def find_curated_fda_document(
     documents: list[dict[str, Any]], identification_number: int
 ) -> dict[str, Any] | None:
@@ -56,6 +72,7 @@ def find_curated_fda_document(
 def check_curation_preflight(
     application_number: str,
     documents_path: Path,
+    urls_path: Path,
     *,
     fetch_record: Callable[[str], dict[str, Any]] = fetch_fda_record,
 ) -> dict[str, Any]:
@@ -74,6 +91,7 @@ def check_curation_preflight(
             "newer_label_available": None,
             "document_id": None,
             "curated_label_date": None,
+            "curated_label_url": None,
             "latest_label_date": None,
             "latest_label_url": None,
         }
@@ -83,6 +101,7 @@ def check_curation_preflight(
         raise ValueError(
             f"{document.get('id')} does not have a publication_date to compare"
         )
+    curated_label_url = resolve_curated_label_url(document, urls_path)
 
     latest_label = get_label_version_fields(fetch_record(normalized_application))
     latest_label_date = fda_date_to_iso(latest_label["publication_date_raw"])
@@ -93,6 +112,7 @@ def check_curation_preflight(
         "newer_label_available": latest_label_date > curated_label_date,
         "document_id": document["id"],
         "curated_label_date": curated_label_date,
+        "curated_label_url": curated_label_url,
         "latest_label_date": latest_label_date,
         "latest_label_url": latest_label["label_url"],
     }

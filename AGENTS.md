@@ -22,6 +22,14 @@ silently coordinate a sequence of low-level commands and pass implementation art
 between them. The skill should invoke the combined command and route from its declared
 curator-facing outcomes.
 
+## Write positive, scoped instructions
+
+When agent behavior needs correction, first revise the instruction that produces the
+behavior. Narrow its scope or state positively and specifically what the agent should do.
+Prefer an exact conversational goal, action, or review boundary over adding lists of
+phrases and behaviors to avoid. Add a negative constraint only when a concrete safety or
+correctness boundary cannot be expressed clearly through positive, scoped guidance.
+
 ## Do not preserve compatibility by default
 
 This repository is a pilot project without external users. Do not retain deprecated

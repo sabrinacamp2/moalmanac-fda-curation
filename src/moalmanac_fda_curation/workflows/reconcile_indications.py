@@ -39,14 +39,16 @@ def main() -> int:
     latest_payload = load_json_object(
         args.latest_indications_json.resolve(), "Latest indication artifact"
     )
-    latest = indexed_latest_indications(
-        latest_payload, biomarker_only=not args.include_non_biomarker
-    )
+    latest = indexed_latest_indications(latest_payload)
     result = map_existing_to_latest_indications(
         existing, latest, model=args.model, max_tokens=args.max_tokens
     )
     result["new_indication_candidates"] = (
-        select_new_indication_candidates(result) if result["verified"] else []
+        select_new_indication_candidates(
+            result, biomarker_only=not args.include_non_biomarker
+        )
+        if result["verified"]
+        else []
     )
     result["document_id"] = args.document_id
     result["biomarker_only"] = not args.include_non_biomarker

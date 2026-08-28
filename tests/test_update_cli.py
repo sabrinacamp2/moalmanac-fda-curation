@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -268,6 +270,7 @@ class UpdateCliTest(unittest.TestCase):
                     "indication": "Existing",
                 }
             ]))
+            (database / "urls.json").write_text("[]")
             work_dir = root / "run"
 
             def extract(command: list[str], check: bool) -> None:
@@ -336,6 +339,72 @@ class UpdateCliTest(unittest.TestCase):
         self.assertIn("Possible counterpart", markdown)
         self.assertIn("Possible split", markdown)
 
+    def test_new_indication_summary_separates_findings_from_curation_candidates(self) -> None:
+        mappings = [
+            {
+                "latest_indication": {
+                    "latest_indication_index": 1,
+                    "review_label": "ALK-positive lung cancer",
+                    "indication": "Drug for ALK-positive lung cancer",
+                    "raw_biomarkers": "ALK",
+                }
+            },
+            {
+                "latest_indication": {
+                    "latest_indication_index": 2,
+                    "review_label": "Advanced RCC",
+                    "indication": "Drug for advanced RCC",
+                    "raw_biomarkers": None,
+                }
+            },
+        ]
+        candidates = [{"latest_indication_index": 1}]
+        output = StringIO()
+        with redirect_stdout(output):
+            prepare_update_indications.print_new_indication_summary(
+                mappings, candidates
+            )
+        summary = output.getvalue()
+        self.assertIn(
+            "New indication 1: ALK-positive lung cancer | Biomarker: ALK | curation candidate",
+            summary,
+        )
+        self.assertIn(
+            "New indication 2: Advanced RCC | Biomarker: none | outside biomarker scope",
+            summary,
+        )
+        self.assertIn("New indications eligible for curation: 1", summary)
+        self.assertIn("New indication indexes: 1", summary)
+
+    def test_new_indication_review_shows_exact_text_biomarker_and_scope(self) -> None:
+        mappings = [{
+            "latest_indication": {
+                "latest_indication_index": 2,
+                "review_label": "Advanced RCC",
+                "indication": "AFINITOR is indicated for advanced RCC.",
+                "raw_biomarkers": None,
+                "source_chunk_index": 4,
+            },
+            "reason": "No existing counterpart.",
+        }]
+        markdown = prepare_update_indications.new_indication_review_markdown(
+            {
+                "application_number": "NDA022334",
+                "latest_label_date": "2026-06-01",
+            },
+            mappings,
+            [],
+            label_markdown_path=Path("/tmp/label.md"),
+            label_pdf_path=Path("/tmp/label.pdf"),
+            reconciliation_path=Path("/tmp/reconciliation.json"),
+            latest_indications_path=Path("/tmp/indications.json"),
+        )
+        self.assertIn("## 2 — Advanced RCC", markdown)
+        self.assertIn("- Biomarker: none", markdown)
+        self.assertIn("- Scope: outside biomarker scope", markdown)
+        self.assertIn("> AFINITOR is indicated for advanced RCC.", markdown)
+        self.assertIn("[Latest FDA label Markdown](</tmp/label.md>)", markdown)
+
     def test_find_revised_indications_owns_history_and_revision_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
@@ -375,7 +444,11 @@ class UpdateCliTest(unittest.TestCase):
                 return_value=0,
             ) as review:
                 self.assertEqual(find_revised_indications.main(), 0)
-            prepare_history.assert_called_once_with(work_dir, overwrite=False)
+            prepare_history.assert_called_once_with(
+                work_dir,
+                overwrite=False,
+                baseline_label_url="https://example.test/old.pdf",
+            )
             review_args = review.call_args.args[0]
             self.assertEqual(review_args.existing_indications_json, indications)
             self.assertEqual(review_args.document_id, "doc:fda.example")

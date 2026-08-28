@@ -45,11 +45,9 @@ curation; do not edit them.
 
 Before the command, explain:
 
-> I’ll check whether this application already has an FDA document in your MOAlmanac
-> database. If it does, I’ll compare the date of the label we curated with FDA’s latest
-> approved label so we can decide whether to perform first-time curation, review an
-> update, or stop because the curated label is current. This reads the database without
-> modifying it and saves the result in the session’s intermediate files.
+> I’ll check whether this application has already been curated. If it has, I’ll compare
+> the curated label with FDA’s latest approved label to see whether we need to review a
+> newer label or whether the curation is already current.
 
 Then run:
 

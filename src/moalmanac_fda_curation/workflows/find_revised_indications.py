@@ -47,7 +47,11 @@ def main() -> int:
             f"The supplied moalmanac-db path is missing: {indications_path}"
         )
 
-    history = prepare_label_history(work_dir, overwrite=args.overwrite)
+    history = prepare_label_history(
+        work_dir,
+        overwrite=args.overwrite,
+        baseline_label_url=status["curated_label_url"],
+    )
     review_args = argparse.Namespace(
         existing_indications_json=indications_path,
         document_id=status["document_id"],

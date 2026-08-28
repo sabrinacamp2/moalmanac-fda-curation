@@ -23,7 +23,24 @@ class CheckCurationPreflightTest(unittest.TestCase):
                         "agent_id": "fda",
                         "identification_number": 125554,
                         "publication_date": "2025-04-11",
+                        "urls": ["url:fda.opdivo:label", "url:fda.opdivo:overview"],
                     }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        self.urls_path = Path(self.temporary_directory.name) / "urls.json"
+        self.urls_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "id": "url:fda.opdivo:label",
+                        "url": "https://example.test/opdivo-2025-04.pdf",
+                    },
+                    {
+                        "id": "url:fda.opdivo:overview",
+                        "url": "https://example.test/opdivo-overview",
+                    },
                 ]
             ),
             encoding="utf-8",
@@ -64,7 +81,10 @@ class CheckCurationPreflightTest(unittest.TestCase):
 
     def test_reports_curated_application_with_newer_label(self) -> None:
         result = check_curation_preflight(
-            "BLA125554", self.documents_path, fetch_record=self.latest_record
+            "BLA125554",
+            self.documents_path,
+            self.urls_path,
+            fetch_record=self.latest_record,
         )
         self.assertEqual(
             result,
@@ -74,6 +94,7 @@ class CheckCurationPreflightTest(unittest.TestCase):
                 "newer_label_available": True,
                 "document_id": "doc:fda.opdivo",
                 "curated_label_date": "2025-04-11",
+                "curated_label_url": "https://example.test/opdivo-2025-04.pdf",
                 "latest_label_date": "2025-10-10",
                 "latest_label_url": "https://example.test/opdivo-2025-10.pdf",
             },
@@ -84,14 +105,17 @@ class CheckCurationPreflightTest(unittest.TestCase):
             raise AssertionError("openFDA should not be queried for an uncurated drug")
 
         result = check_curation_preflight(
-            "NDA999999", self.documents_path, fetch_record=unexpected_fetch
+            "NDA999999",
+            self.documents_path,
+            self.urls_path,
+            fetch_record=unexpected_fetch,
         )
         self.assertFalse(result["previously_curated"])
         self.assertIsNone(result["newer_label_available"])
 
     def test_rejects_number_without_application_type(self) -> None:
         with self.assertRaisesRegex(ValueError, "must include its type"):
-            check_curation_preflight("125554", self.documents_path)
+            check_curation_preflight("125554", self.documents_path, self.urls_path)
 
 
 if __name__ == "__main__":

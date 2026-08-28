@@ -39,17 +39,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def required_database_paths(database_dir: Path) -> tuple[Path, Path]:
+def required_database_paths(database_dir: Path) -> tuple[Path, Path, Path]:
     root = database_dir.resolve()
     documents = root / "referenced" / "documents.json"
     indications = root / "referenced" / "indications.json"
-    missing = [str(path) for path in (documents, indications) if not path.is_file()]
+    urls = root / "referenced" / "urls.json"
+    missing = [str(path) for path in (documents, indications, urls) if not path.is_file()]
     if missing:
         raise FileNotFoundError(
             "The supplied moalmanac-db path is missing required file(s): "
             + ", ".join(missing)
         )
-    return documents, indications
+    return documents, indications, urls
 
 
 def write_once(path: Path, payload: Any, *, overwrite: bool, name: str) -> None:
@@ -78,6 +79,88 @@ def indication_text(mapping: dict[str, Any], side: str) -> str:
     if isinstance(value, dict) and isinstance(value.get("indication"), str):
         return value["indication"]
     return "Not available"
+
+
+def print_new_indication_summary(
+    mappings: list[dict[str, Any]], candidates: list[dict[str, Any]]
+) -> None:
+    """Report every unmatched indication and identify the curation subset."""
+    candidate_indexes = {
+        candidate["latest_indication_index"] for candidate in candidates
+    }
+    print(f"New label indications without an existing match: {len(mappings)}")
+    for mapping in mappings:
+        latest = mapping["latest_indication"]
+        index = latest["latest_indication_index"]
+        label = latest.get("review_label") or latest["indication"]
+        biomarker = latest.get("raw_biomarkers") or "none"
+        scope = "curation candidate" if index in candidate_indexes else "outside biomarker scope"
+        print(f"New indication {index}: {label} | Biomarker: {biomarker} | {scope}")
+    print(f"New indications eligible for curation: {len(candidates)}")
+    if candidate_indexes:
+        print("New indication indexes: " + ", ".join(map(str, sorted(candidate_indexes))))
+
+
+def new_indication_review_markdown(
+    preflight: dict[str, Any],
+    mappings: list[dict[str, Any]],
+    candidates: list[dict[str, Any]],
+    *,
+    label_markdown_path: Path,
+    label_pdf_path: Path,
+    reconciliation_path: Path,
+    latest_indications_path: Path,
+) -> str:
+    """Create a compact verification surface for unmatched label indications."""
+    candidate_indexes = {
+        candidate["latest_indication_index"] for candidate in candidates
+    }
+    lines = [
+        "# Newly identified label indications",
+        "",
+        f"- Application: {preflight['application_number']}",
+        f"- Latest FDA label date: {preflight['latest_label_date']}",
+        f"- Without an existing MOAlmanac match: {len(mappings)}",
+        f"- Eligible for biomarker curation: {len(candidates)}",
+    ]
+    for mapping in mappings:
+        latest = mapping["latest_indication"]
+        index = latest["latest_indication_index"]
+        label = latest.get("review_label") or f"Indication {index}"
+        scope = (
+            "curation candidate"
+            if index in candidate_indexes
+            else "outside biomarker scope"
+        )
+        indication = latest["indication"]
+        lines.extend(
+            [
+                "",
+                f"## {index} — {label}",
+                "",
+                f"- Biomarker: {latest.get('raw_biomarkers') or 'none'}",
+                f"- Scope: {scope}",
+                f"- Source chunk: {latest.get('source_chunk_index', 'not available')}",
+                f"- Match assessment: {mapping.get('reason') or 'Not provided'}",
+                "",
+                "### Exact extracted indication",
+                "",
+                *(f"> {line}" for line in indication.splitlines()),
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Sources and artifacts",
+            "",
+            f"- [Latest FDA label Markdown](<{label_markdown_path}>)",
+            f"- [Latest FDA label PDF](<{label_pdf_path}>)",
+            f"- [Latest-label indication extraction](<{latest_indications_path}>)",
+            f"- [Reconciliation JSON](<{reconciliation_path}>)",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def exception_review_markdown(
@@ -135,14 +218,19 @@ def exception_review_markdown(
 def main() -> int:
     args = parse_args()
     work_dir = args.work_dir.resolve()
-    documents_path, indications_path = required_database_paths(args.database_dir)
+    documents_path, indications_path, urls_path = required_database_paths(
+        args.database_dir
+    )
     intermediate = work_dir / "intermediate"
     review_dir = work_dir / "review"
     preflight_path = intermediate / "curation-status.json"
     reconciliation_path = intermediate / "indication-reconciliation.json"
     review_path = review_dir / "reconciliation-exceptions.md"
+    new_review_path = review_dir / "new-indications.md"
 
-    preflight = check_curation_preflight(args.application_number, documents_path)
+    preflight = check_curation_preflight(
+        args.application_number, documents_path, urls_path
+    )
     if not preflight["previously_curated"]:
         raise ValueError("Update review requires a previously curated FDA application")
     if not preflight["newer_label_available"]:
@@ -195,9 +283,7 @@ def main() -> int:
         latest_indications_path, "Latest indication artifact"
     )
     existing = load_existing_indications(indications_path, preflight["document_id"])
-    latest = indexed_latest_indications(
-        latest_payload, biomarker_only=not args.include_non_biomarker
-    )
+    latest = indexed_latest_indications(latest_payload)
     if reconciliation_path.exists() and not args.overwrite:
         reconciliation = load_json_object(
             reconciliation_path, "Indication reconciliation artifact"
@@ -210,7 +296,10 @@ def main() -> int:
             max_tokens=args.max_tokens,
         )
         reconciliation["new_indication_candidates"] = (
-            select_new_indication_candidates(reconciliation)
+            select_new_indication_candidates(
+                reconciliation,
+                biomarker_only=not args.include_non_biomarker,
+            )
             if reconciliation["verified"]
             else []
         )
@@ -222,6 +311,10 @@ def main() -> int:
         raise ValueError(
             f"Indication reconciliation is unverified: {reconciliation_path}"
         )
+    new_candidates = select_new_indication_candidates(
+        reconciliation,
+        biomarker_only=not args.include_non_biomarker,
+    )
     groups = mapping_groups(reconciliation)
     exceptions = groups["not_found"] + groups["uncertain"]
     if exceptions:
@@ -243,13 +336,26 @@ def main() -> int:
         print("Curator review required before continuing.")
     else:
         print("Reconciliation exceptions: none")
-    new_indexes = [
-        mapping["latest_indication"]["latest_indication_index"]
-        for mapping in groups["new"]
-    ]
-    print(f"Possible new indications: {len(groups['new'])}")
-    if new_indexes:
-        print("New indication indexes: " + ", ".join(map(str, new_indexes)))
+    if groups["new"]:
+        new_review = new_indication_review_markdown(
+            preflight,
+            groups["new"],
+            new_candidates,
+            label_markdown_path=work_dir / "labels" / f"{stem}.md",
+            label_pdf_path=work_dir / "labels" / f"{stem}.pdf",
+            reconciliation_path=reconciliation_path,
+            latest_indications_path=latest_indications_path,
+        )
+        if new_review_path.exists() and not args.overwrite:
+            if new_review_path.read_text(encoding="utf-8") != new_review:
+                raise FileExistsError(
+                    f"New indication review exists with different content: {new_review_path}"
+                )
+        else:
+            new_review_path.parent.mkdir(parents=True, exist_ok=True)
+            new_review_path.write_text(new_review, encoding="utf-8")
+        print(f"New indication review: {new_review_path}")
+    print_new_indication_summary(groups["new"], new_candidates)
     print(f"Matched existing indications: {len(groups['matched'])}")
     print(f"Existing indications not found: {len(groups['not_found'])}")
     print(f"Uncertain mappings: {len(groups['uncertain'])}")

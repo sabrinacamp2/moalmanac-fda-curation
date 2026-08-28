@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from moalmanac_fda_curation.core.identify_new_indications import (
+    indexed_latest_indications,
     map_existing_to_latest_indications,
     select_new_indication_candidates,
 )
@@ -105,6 +106,36 @@ class IdentifyNewIndicationsTest(unittest.TestCase):
         self.assertEqual(candidates[0]["raw_biomarkers"], "ALK")
         self.assertEqual(
             candidates[0]["new_candidate_reason"], "No existing counterpart."
+        )
+
+    def test_reconciliation_indexes_all_latest_indications(self) -> None:
+        payload = {"indications": [
+            {"indication": "Biomarker indication", "raw_biomarkers": "ALK"},
+            {"indication": "TSC indication", "raw_biomarkers": None},
+        ]}
+        indexed = indexed_latest_indications(payload)
+        self.assertEqual([item["latest_indication_index"] for item in indexed], [0, 1])
+
+    def test_biomarker_scope_is_applied_only_to_new_candidates(self) -> None:
+        non_biomarker = {
+            "latest_indication_index": 2,
+            "indication": "TSC indication",
+            "raw_biomarkers": None,
+        }
+        mapping_result = {
+            "verified": True,
+            "mappings": [{
+                "classification": "new",
+                "latest_indication": non_biomarker,
+                "reason": "No existing counterpart.",
+            }],
+        }
+        self.assertEqual(select_new_indication_candidates(mapping_result), [])
+        self.assertEqual(
+            select_new_indication_candidates(mapping_result, biomarker_only=False)[0][
+                "latest_indication_index"
+            ],
+            2,
         )
 
     def test_rejects_candidates_from_unverified_mapping(self) -> None:

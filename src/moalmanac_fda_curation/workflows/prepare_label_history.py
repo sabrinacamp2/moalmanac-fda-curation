@@ -30,7 +30,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def prepare_label_history(work_dir: Path, *, overwrite: bool = False) -> LabelHistoryPaths:
+def prepare_label_history(
+    work_dir: Path,
+    *,
+    overwrite: bool = False,
+    baseline_label_url: str | None = None,
+) -> LabelHistoryPaths:
     work_dir = work_dir.resolve()
     document_path = work_dir / "intermediate" / "document.proposal.json"
     document = load_document_artifact(document_path)
@@ -62,6 +67,7 @@ def prepare_label_history(work_dir: Path, *, overwrite: bool = False) -> LabelHi
         output_dir=changelog_dir,
         cache_dir=cache_dir,
         historical_labels_dir=work_dir / "historical-labels",
+        baseline_label_url=baseline_label_url,
     )
     if not cache_json.exists():
         raise FileNotFoundError(f"Label-history cache was not created: {cache_json}")
