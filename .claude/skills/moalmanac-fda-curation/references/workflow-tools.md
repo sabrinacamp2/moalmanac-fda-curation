@@ -122,22 +122,11 @@ Successful matches require no separate review. The command writes
 stop for curator review in that case. Otherwise, curate any printed new-indication
 indexes, or proceed directly to revision analysis when there are none.
 
-Assess revisions using the cached Indications and Usage text for the curated baseline
-and latest label:
+Find revisions and create reviews for flagged indications in one command:
 
 ```bash
-moalmanac-fda-curation prepare-label-history \
-  --work-dir RUN_DIR
-
-moalmanac-fda-curation prepare-revision-review \
-  --existing-indications-json MOALMANAC_DB_ROOT/referenced/indications.json \
-  --document-id doc:fda.example \
-  --section-cache-json CACHE_PATH_PRINTED_BY_PREPARE_LABEL_HISTORY \
-  --changelog-json CHANGELOG_PATH_PRINTED_BY_PREPARE_LABEL_HISTORY \
-  --baseline-label-url BASELINE_FDA_LABEL_URL \
-  --latest-label-url LATEST_FDA_LABEL_URL \
-  --baseline-label-date BASELINE_LABEL_DATE \
-  --latest-label-date LATEST_LABEL_DATE \
+moalmanac-fda-curation find-revised-indications \
+  --database-dir MOALMANAC_DB_ROOT \
   --work-dir RUN_DIR
 ```
 

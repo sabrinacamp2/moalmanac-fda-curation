@@ -76,8 +76,9 @@ indication is not found or a mapping is uncertain, review
 `review/reconciliation-exceptions.md` before continuing. Otherwise, curate any new
 indication indexes printed by the command and then proceed to revision analysis.
 
-Revision analysis uses `prepare-revision-review`. It retains the complete assessment in
-JSON while creating Markdown only for indications flagged as revised. Each review shows
+Revision analysis uses `find-revised-indications`. It builds or reuses the required
+label history in the background and creates Markdown only for indications flagged as
+revised. Each review shows
 the exact removed and added words, the complete changed label passage, and proposed field changes;
 unchanged indications are omitted from curator-facing review. The existing historical
 event matcher runs on the bounded baseline-to-latest changelog and uses a verified later

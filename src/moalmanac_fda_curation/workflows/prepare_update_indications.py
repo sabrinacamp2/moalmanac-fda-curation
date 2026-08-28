@@ -138,7 +138,7 @@ def main() -> int:
     documents_path, indications_path = required_database_paths(args.database_dir)
     intermediate = work_dir / "intermediate"
     review_dir = work_dir / "review"
-    preflight_path = intermediate / "curation-preflight.json"
+    preflight_path = intermediate / "curation-status.json"
     reconciliation_path = intermediate / "indication-reconciliation.json"
     review_path = review_dir / "reconciliation-exceptions.md"
 

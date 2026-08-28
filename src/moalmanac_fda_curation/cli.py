@@ -10,15 +10,12 @@ from dotenv import load_dotenv
 from . import doctor
 from .review import assembly, decisions
 from .workflows import (
-    assess_revisions,
     check_preflight,
     extract_candidates,
+    find_revised_indications,
     prepare_document,
-    prepare_label_history,
-    prepare_revision_review,
     prepare_selected,
     prepare_update_indications,
-    propose_revisions,
     reconcile_indications,
 )
 
@@ -48,21 +45,9 @@ COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
         "Compare a newer label with curated indications and identify new ones",
         prepare_update_indications.main,
     ),
-    "prepare-label-history": (
-        "Build historical Indications and Usage changelog and cache artifacts",
-        prepare_label_history.main,
-    ),
-    "assess-revised-indications": (
-        "Identify existing indications revised between two FDA labels",
-        assess_revisions.main,
-    ),
-    "prepare-revision-review": (
-        "Assess revisions and create reviews only for flagged indications",
-        prepare_revision_review.main,
-    ),
-    "propose-revised-indications": (
-        "Propose minimal patches for verified revised indications",
-        propose_revisions.main,
+    "find-revised-indications": (
+        "Find curated indications that changed in a newer FDA label",
+        find_revised_indications.main,
     ),
     "prepare-selected-review": (
         "Prepare descriptions, approval evidence, and review files for selected indications",

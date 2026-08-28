@@ -16,6 +16,12 @@ When a workflow needs new deterministic behavior, add or extend a CLI command an
 it there. Then keep the corresponding skill change limited to invoking the command and
 handling its curator-facing outcomes.
 
+When several mechanical steps should appear as one conceptual workflow step, prefer
+combining them behind one CLI command. Do not simulate consolidation by having the skill
+silently coordinate a sequence of low-level commands and pass implementation artifacts
+between them. The skill should invoke the combined command and route from its declared
+curator-facing outcomes.
+
 ## Do not preserve compatibility by default
 
 This repository is a pilot project without external users. Do not retain deprecated

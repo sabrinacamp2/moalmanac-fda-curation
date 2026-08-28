@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import NamedTuple
 
 from ..core.artifacts import (
     document_label_url,
@@ -11,6 +12,11 @@ from ..core.artifacts import (
     resolve_document_application_number,
 )
 from ..core.build_section1_changelogs import build_changelog, output_stem
+
+
+class LabelHistoryPaths(NamedTuple):
+    changelog_json: Path
+    cache_json: Path
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,9 +30,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
-    work_dir = args.work_dir.resolve()
+def prepare_label_history(work_dir: Path, *, overwrite: bool = False) -> LabelHistoryPaths:
+    work_dir = work_dir.resolve()
     document_path = work_dir / "intermediate" / "document.proposal.json"
     document = load_document_artifact(document_path)
     application = resolve_document_application_number(document)
@@ -41,11 +46,9 @@ def main() -> int:
     existing = [
         path for path in (changelog_markdown, changelog_json) if path.exists()
     ]
-    if existing and not args.overwrite:
+    if existing and not overwrite:
         if len(existing) == 2 and cache_json.exists():
-            print(f"Reusing label history: {changelog_json}")
-            print(f"Indications and Usage cache: {cache_json}")
-            return 0
+            return LabelHistoryPaths(changelog_json, cache_json)
         paths = ", ".join(str(path) for path in existing)
         raise FileExistsError(
             f"Incomplete label-history artifacts already exist: {paths}. "
@@ -62,8 +65,14 @@ def main() -> int:
     )
     if not cache_json.exists():
         raise FileNotFoundError(f"Label-history cache was not created: {cache_json}")
-    print(f"Label history: {changelog_json}")
-    print(f"Indications and Usage cache: {cache_json}")
+    return LabelHistoryPaths(changelog_json, cache_json)
+
+
+def main() -> int:
+    args = parse_args()
+    paths = prepare_label_history(args.work_dir, overwrite=args.overwrite)
+    print(f"Label history: {paths.changelog_json}")
+    print(f"Indications and Usage cache: {paths.cache_json}")
     return 0
 
 

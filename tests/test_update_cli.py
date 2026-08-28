@@ -10,6 +10,7 @@ from moalmanac_fda_curation import cli
 from moalmanac_fda_curation.workflows import (
     assess_revisions,
     check_preflight,
+    find_revised_indications,
     prepare_label_history,
     prepare_revision_review,
     prepare_update_indications,
@@ -24,13 +25,14 @@ class UpdateCliTest(unittest.TestCase):
         self.assertIn("check-setup", usage)
         self.assertIn("check-curation-status", usage)
         self.assertIn("reconcile-indications", usage)
-        self.assertIn("prepare-label-history", usage)
         self.assertIn("find-new-indications", usage)
-        self.assertIn("assess-revised-indications", usage)
-        self.assertIn("prepare-revision-review", usage)
-        self.assertIn("propose-revised-indications", usage)
+        self.assertIn("find-revised-indications", usage)
         self.assertNotIn("check-curation-preflight", usage)
         self.assertNotIn("prepare-update-indication-review", usage)
+        self.assertNotIn("prepare-label-history", usage)
+        self.assertNotIn("prepare-revision-review", usage)
+        self.assertNotIn("assess-revised-indications", usage)
+        self.assertNotIn("propose-revised-indications", usage)
         self.assertNotIn("  doctor", usage)
 
     def test_curation_status_writes_an_artifact(self) -> None:
@@ -333,6 +335,54 @@ class UpdateCliTest(unittest.TestCase):
         self.assertIn("Existing indication", markdown)
         self.assertIn("Possible counterpart", markdown)
         self.assertIn("Possible split", markdown)
+
+    def test_find_revised_indications_owns_history_and_revision_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            work_dir = root / "run"
+            intermediate = work_dir / "intermediate"
+            intermediate.mkdir(parents=True)
+            status = {
+                "previously_curated": True,
+                "newer_label_available": True,
+                "document_id": "doc:fda.example",
+                "curated_label_url": "https://example.test/old.pdf",
+                "latest_label_url": "https://example.test/new.pdf",
+                "curated_label_date": "2025-04-11",
+                "latest_label_date": "2026-08-12",
+            }
+            (intermediate / "curation-status.json").write_text(json.dumps(status))
+            database = root / "moalmanac-db" / "referenced"
+            database.mkdir(parents=True)
+            indications = database / "indications.json"
+            indications.write_text("[]")
+            history = prepare_label_history.LabelHistoryPaths(
+                intermediate / "history.json",
+                intermediate / "cache.json",
+            )
+            argv = [
+                "find-revised-indications",
+                "--database-dir", str(root / "moalmanac-db"),
+                "--work-dir", str(work_dir),
+            ]
+            with patch("sys.argv", argv), patch.object(
+                find_revised_indications,
+                "prepare_label_history",
+                return_value=history,
+            ) as prepare_history, patch.object(
+                find_revised_indications,
+                "run_revision_review",
+                return_value=0,
+            ) as review:
+                self.assertEqual(find_revised_indications.main(), 0)
+            prepare_history.assert_called_once_with(work_dir, overwrite=False)
+            review_args = review.call_args.args[0]
+            self.assertEqual(review_args.existing_indications_json, indications)
+            self.assertEqual(review_args.document_id, "doc:fda.example")
+            self.assertEqual(review_args.section_cache_json, history.cache_json)
+            self.assertEqual(review_args.changelog_json, history.changelog_json)
+            self.assertEqual(review_args.baseline_label_date, "2025-04-11")
+            self.assertEqual(review_args.latest_label_date, "2026-08-12")
 
     def test_revision_proposals_only_process_revised_assessments(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

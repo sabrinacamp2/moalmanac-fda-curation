@@ -29,28 +29,18 @@ review or run new-entry assembly during an update session.
 
 ## Review flagged revisions
 
-Tell the curator that existing indications will now be checked for revisions. Run:
+Tell the curator: “Now we'll see if any indications have changed in the newer label.”
+Then run:
 
 ```bash
-moalmanac-fda-curation prepare-label-history \
+moalmanac-fda-curation find-revised-indications \
+  --database-dir MOALMANAC_DB_ROOT \
   --work-dir RUN_DIR
 ```
 
-Use the cache and changelog paths printed by that command, together with the curation-status
-metadata, to run:
-
-```bash
-moalmanac-fda-curation prepare-revision-review \
-  --existing-indications-json MOALMANAC_DB_ROOT/referenced/indications.json \
-  --document-id DOCUMENT_ID \
-  --section-cache-json PRINTED_CACHE_PATH \
-  --changelog-json PRINTED_CHANGELOG_PATH \
-  --baseline-label-url CURATED_LABEL_URL \
-  --latest-label-url LATEST_LABEL_URL \
-  --baseline-label-date CURATED_LABEL_DATE \
-  --latest-label-date LATEST_LABEL_DATE \
-  --work-dir RUN_DIR
-```
+Do not narrate label-history downloads, caches, date coverage checks, or approval-date
+matching. The command owns those mechanics and should surface them only when it cannot
+complete the assessment.
 
 Route from the command output:
 

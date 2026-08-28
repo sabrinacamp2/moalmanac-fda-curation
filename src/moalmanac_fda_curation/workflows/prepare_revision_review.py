@@ -329,8 +329,7 @@ def revision_markdown(
     return "\n".join(lines)
 
 
-def main() -> int:
-    args = parse_args()
+def run(args: argparse.Namespace) -> int:
     work_dir = args.work_dir.resolve()
     intermediate = work_dir / "intermediate"
     assessment_path = intermediate / "revision-assessment.json"
@@ -497,6 +496,10 @@ def main() -> int:
     if complete_indications:
         print(f"Full proposed revision records: {candidates_path}")
     return 0
+
+
+def main() -> int:
+    return run(parse_args())
 
 
 if __name__ == "__main__":
