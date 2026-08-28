@@ -21,15 +21,19 @@ from moalmanac_fda_curation.workflows import (
 class UpdateCliTest(unittest.TestCase):
     def test_cli_lists_update_commands(self) -> None:
         usage = cli.usage()
-        self.assertIn("check-curation-preflight", usage)
+        self.assertIn("check-setup", usage)
+        self.assertIn("check-curation-status", usage)
         self.assertIn("reconcile-indications", usage)
         self.assertIn("prepare-label-history", usage)
-        self.assertIn("prepare-update-indication-review", usage)
+        self.assertIn("find-new-indications", usage)
         self.assertIn("assess-revised-indications", usage)
         self.assertIn("prepare-revision-review", usage)
         self.assertIn("propose-revised-indications", usage)
+        self.assertNotIn("check-curation-preflight", usage)
+        self.assertNotIn("prepare-update-indication-review", usage)
+        self.assertNotIn("  doctor", usage)
 
-    def test_preflight_writes_an_artifact(self) -> None:
+    def test_curation_status_writes_an_artifact(self) -> None:
         result = {
             "application_number": "BLA125554",
             "previously_curated": True,
@@ -37,9 +41,9 @@ class UpdateCliTest(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            output = root / "preflight.json"
+            output = root / "curation-status.json"
             argv = [
-                "check-curation-preflight",
+                "check-curation-status",
                 "--application-number", "BLA125554",
                 "--documents-json", str(root / "documents.json"),
                 "--output-json", str(output),
@@ -278,7 +282,7 @@ class UpdateCliTest(unittest.TestCase):
                 }]}))
 
             argv = [
-                "prepare-update-indication-review",
+                "find-new-indications",
                 "--application-number", "BLA125554",
                 "--database-dir", str(root / "moalmanac-db"),
                 "--work-dir", str(work_dir),

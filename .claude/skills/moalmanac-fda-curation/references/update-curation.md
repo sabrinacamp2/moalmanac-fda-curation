@@ -1,6 +1,6 @@
 # Newer-label update curation
 
-Use this procedure only when preflight reports both `previously_curated: true` and
+Use this procedure only when the curation status reports both `previously_curated: true` and
 `newer_label_available: true`.
 
 ## Check for new indications
@@ -9,7 +9,7 @@ Tell the curator when the application was last curated, report the newer label d
 and explain that new indications will be checked first. Then run:
 
 ```bash
-moalmanac-fda-curation prepare-update-indication-review \
+moalmanac-fda-curation find-new-indications \
   --application-number APPLICATION_NUMBER \
   --database-dir MOALMANAC_DB_ROOT \
   --work-dir RUN_DIR
@@ -36,7 +36,7 @@ moalmanac-fda-curation prepare-label-history \
   --work-dir RUN_DIR
 ```
 
-Use the cache and changelog paths printed by that command, together with the preflight
+Use the cache and changelog paths printed by that command, together with the curation-status
 metadata, to run:
 
 ```bash

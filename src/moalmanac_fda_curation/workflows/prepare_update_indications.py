@@ -1,4 +1,4 @@
-"""Prepare latest-label reconciliation and review only unresolved exceptions."""
+"""Compare a newer FDA label with curated indications and identify new ones."""
 
 from __future__ import annotations
 
@@ -151,7 +151,7 @@ def main() -> int:
         preflight_path,
         preflight,
         overwrite=args.overwrite,
-        name="Curation preflight artifact",
+        name="Curation status artifact",
     )
 
     document_path = intermediate / "document.proposal.json"

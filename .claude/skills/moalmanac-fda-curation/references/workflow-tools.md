@@ -6,11 +6,11 @@
 if [ -d .venv ]; then source .venv/bin/activate; else python3 -m venv .venv && source .venv/bin/activate; fi
 python -m pip install -e .
 export ANTHROPIC_API_KEY="..."
-moalmanac-fda-curation doctor
+moalmanac-fda-curation check-setup
 moalmanac-fda-curation --help
 ```
 
-Always inspect and reuse `.venv` before creating an environment. `doctor` reports the
+Always inspect and reuse `.venv` before creating an environment. `check-setup` reports the
 virtual-environment state and checks installation, key presence, FDA connectivity, and
 permissions for the `analyses/` parent directory. It never creates a placeholder
 curation run or prints the key.
@@ -27,7 +27,7 @@ Do not look up the brand name just to construct this directory.
 ## Locate the MOAlmanac database
 
 Ask the curator: “What is the path to your local `moalmanac-db` repository?” Do this
-before running preflight. Do not inspect sibling directories, search the filesystem or
+before checking curation status. Do not inspect sibling directories, search the filesystem or
 internet, or clone a repository to infer the answer.
 
 Resolve the supplied path to an absolute path. It is usable only when both files exist:
@@ -54,10 +54,10 @@ Before the command, explain:
 Then run:
 
 ```bash
-moalmanac-fda-curation check-curation-preflight \
+moalmanac-fda-curation check-curation-status \
   --application-number BLA125554 \
   --documents-json MOALMANAC_DB_ROOT/referenced/documents.json \
-  --output-json RUN_DIR/intermediate/curation-preflight.json
+  --output-json RUN_DIR/intermediate/curation-status.json
 ```
 
 If the application is uncurated, continue with the new-entry workflow below. If it is
@@ -111,7 +111,7 @@ Prepare the latest label, extract its indications, and reconcile them against MO
 in one command:
 
 ```bash
-moalmanac-fda-curation prepare-update-indication-review \
+moalmanac-fda-curation find-new-indications \
   --application-number BLA125554 \
   --database-dir MOALMANAC_DB_ROOT \
   --work-dir RUN_DIR

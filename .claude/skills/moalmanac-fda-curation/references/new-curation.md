@@ -1,6 +1,6 @@
 # First-time FDA curation
 
-Use this procedure only after preflight reports `previously_curated: false`.
+Use this procedure only after the curation status reports `previously_curated: false`.
 
 ## Prepare and screen candidates
 

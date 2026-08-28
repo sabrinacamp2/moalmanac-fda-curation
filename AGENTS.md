@@ -15,3 +15,11 @@ reinterpret, or independently reimplement that logic.
 When a workflow needs new deterministic behavior, add or extend a CLI command and test
 it there. Then keep the corresponding skill change limited to invoking the command and
 handling its curator-facing outcomes.
+
+## Do not preserve compatibility by default
+
+This repository is a pilot project without external users. Do not retain deprecated
+commands, aliases, schemas, artifact names, or behavior solely for backward
+compatibility. Prefer the clearest current interface and update the implementation,
+tests, documentation, and skill together. Preserve compatibility only when the user
+explicitly requests it for a particular change.

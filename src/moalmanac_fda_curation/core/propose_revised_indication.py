@@ -74,7 +74,7 @@ based on its assessed changes between the baseline and current FDA labels.
 {_json(guidance)}
 ```
 
-# Cited deterministic source-label diff hunks
+# Cited deterministic source-label wording changes
 
 ```json
 {_json(relevant_hunks)}
@@ -139,10 +139,10 @@ def propose_revised_indication(
         raise ValueError("A revised assessment requires hunk IDs and changes")
     hunks_by_id = {hunk.get("hunk_id"): hunk for hunk in diff_hunks}
     if None in hunks_by_id or len(hunks_by_id) != len(diff_hunks):
-        raise ValueError("Diff hunks must have unique non-null hunk IDs")
+        raise ValueError("Label changes must have unique non-null IDs")
     unknown_hunks = [hunk_id for hunk_id in hunk_ids if hunk_id not in hunks_by_id]
     if unknown_hunks:
-        raise ValueError(f"Assessment cites unknown diff hunks: {unknown_hunks}")
+        raise ValueError(f"Assessment cites unknown label changes: {unknown_hunks}")
     relevant_hunks = [hunks_by_id[hunk_id] for hunk_id in hunk_ids]
 
     prompt = build_label_diff_revision_prompt(

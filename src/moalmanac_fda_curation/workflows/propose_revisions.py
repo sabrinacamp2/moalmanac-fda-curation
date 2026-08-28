@@ -32,7 +32,7 @@ def main() -> int:
     diff_hunks = assessment.get("diff_hunks")
     assessments = assessment.get("assessments")
     if not isinstance(diff_hunks, list) or not isinstance(assessments, list):
-        raise ValueError("Revision assessment must contain diff_hunks and assessments lists")
+        raise ValueError("Revision assessment must contain label changes and assessments")
     revised = [item for item in assessments if item.get("status") == "revised"]
     proposals = [
         propose_revised_indication(

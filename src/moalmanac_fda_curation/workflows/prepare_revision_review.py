@@ -295,11 +295,11 @@ def revision_markdown(
             ]
         )
 
-    lines.extend(["## FDA source — verbatim label diff", ""])
-    for hunk in hunks:
+    lines.extend(["## FDA source — exact label wording changes", ""])
+    for passage_number, hunk in enumerate(hunks, start=1):
         lines.extend(
             [
-                f"### {hunk['hunk_id']}",
+                f"### Changed passage {passage_number}",
                 "",
                 "```diff",
                 *diff_block(hunk.get("baseline_text"), hunk.get("latest_text")),
@@ -343,7 +343,7 @@ def main() -> int:
         result = load_json_object(assessment_path, "Revision assessment artifact")
         diff_hunks = result.get("diff_hunks")
         if not isinstance(diff_hunks, list):
-            raise ValueError("Revision assessment must contain diff_hunks")
+            raise ValueError("Revision assessment must contain label changes")
     else:
         existing = load_existing_indications(
             args.existing_indications_json.resolve(), args.document_id

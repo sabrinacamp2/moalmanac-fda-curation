@@ -112,7 +112,7 @@ def build_revision_identification_prompt(
 Determine which existing curated MOAlmanac FDA indications were revised between
 two versions of the label's Indications and Usage section.
 
-The diff hunks below were generated deterministically from the source label text.
+The label changes below were generated deterministically from the source label text.
 Use them as the only evidence of label changes. Associate changes with an existing
 indication only when the hunk applies to that indication. A new indication or a
 change concerning a different indication is not evidence that the target changed.
@@ -123,7 +123,7 @@ change concerning a different indication is not evidence that the target changed
 {json.dumps(targets, indent=2, ensure_ascii=False)}
 ```
 
-# Source-label diff hunks
+# Source-label wording changes
 
 ```json
 {json.dumps(diff_hunks, indent=2, ensure_ascii=False)}
@@ -131,8 +131,8 @@ change concerning a different indication is not evidence that the target changed
 
 # Statuses
 
-- `revised`: one or more diff hunks change or further specify the target indication.
-- `not_revised`: none of the diff hunks change or further specify the target.
+- `revised`: one or more label changes modify or further specify the target indication.
+- `not_revised`: none of the label changes modify or further specify the target.
 - `uncertain`: the supplied evidence does not support a confident determination.
 
 # Output rules
@@ -180,7 +180,7 @@ def identify_revised_indications(
         raise ValueError("Existing indications must have unique non-null IDs")
     hunks_by_id = {hunk.get("hunk_id"): hunk for hunk in diff_hunks}
     if None in hunks_by_id or len(hunks_by_id) != len(diff_hunks):
-        raise ValueError("Diff hunks must have unique non-null hunk IDs")
+        raise ValueError("Label changes must have unique non-null IDs")
 
     prompt = build_revision_identification_prompt(existing_indications, diff_hunks)
     raw = llm(prompt) if llm else _call_claude(prompt, model, max_tokens)
@@ -198,7 +198,7 @@ def identify_revised_indications(
         seen_ids.append(indication_id)
         unknown_hunks = [hunk_id for hunk_id in hunk_ids if hunk_id not in hunks_by_id]
         for hunk_id in unknown_hunks:
-            errors.append(f"Assessment {index} cites unknown diff hunk: {hunk_id}")
+            errors.append(f"Assessment {index} cites unknown label change: {hunk_id}")
         if status == "revised" and (not hunk_ids or not changes):
             errors.append(
                 f"Assessment {index} revised status requires hunk IDs and changes"

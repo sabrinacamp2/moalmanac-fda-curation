@@ -1,4 +1,4 @@
-"""Check whether an FDA application has prior MOAlmanac curation and a newer label."""
+"""Check whether an FDA application was curated and whether a newer label exists."""
 
 from __future__ import annotations
 
@@ -29,9 +29,9 @@ def main() -> int:
         return 0
     output_path = args.output_json.resolve()
     if output_path.exists() and not args.overwrite:
-        raise FileExistsError(f"Preflight artifact already exists: {output_path}")
+        raise FileExistsError(f"Curation status already exists: {output_path}")
     write_json_atomic(output_path, result)
-    print(f"Curation preflight: {output_path}")
+    print(f"Curation status: {output_path}")
     return 0
 
 

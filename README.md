@@ -65,7 +65,7 @@ the update workflow combines latest-label preparation, indication extraction, an
 reconciliation into one routing step:
 
 ```shell
-moalmanac-fda-curation prepare-update-indication-review \
+moalmanac-fda-curation find-new-indications \
   --application-number BLA125554 \
   --database-dir /path/to/moalmanac-db \
   --work-dir analyses/BLA125554
@@ -78,7 +78,7 @@ indication indexes printed by the command and then proceed to revision analysis.
 
 Revision analysis uses `prepare-revision-review`. It retains the complete assessment in
 JSON while creating Markdown only for indications flagged as revised. Each review shows
-the exact removed and added words, verbatim source hunk, and proposed field changes;
+the exact removed and added words, the complete changed label passage, and proposed field changes;
 unchanged indications are omitted from curator-facing review. The existing historical
 event matcher runs on the bounded baseline-to-latest changelog and uses a verified later
 event to populate `initial_approval_date` and `initial_approval_url` in a full proposed
@@ -97,7 +97,7 @@ src/moalmanac_fda_curation/
   review/                     Review packets, decisions, and final assembly
   workflows/                  Curator-facing workflow orchestration
   cli.py                      Stable command-line entry point
-  doctor.py                   Installation and environment checks
+  doctor.py                   Implementation for the `check-setup` command
 .claude/skills/               Agent workflow instructions
 tests/                        Workflow and review tests
 analyses/                     Revision notebook plus ignored local curation runs

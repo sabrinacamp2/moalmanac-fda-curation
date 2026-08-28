@@ -24,11 +24,11 @@ from .workflows import (
 
 
 COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
-    "doctor": (
+    "check-setup": (
         "Check installation, API-key presence, FDA access, and output permissions",
         doctor.main,
     ),
-    "check-curation-preflight": (
+    "check-curation-status": (
         "Check whether an FDA application is curated and has a newer label",
         check_preflight.main,
     ),
@@ -44,8 +44,8 @@ COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
         "Map existing indications to the latest-label indication candidates",
         reconcile_indications.main,
     ),
-    "prepare-update-indication-review": (
-        "Prepare latest-label reconciliation and unresolved exception review",
+    "find-new-indications": (
+        "Compare a newer label with curated indications and identify new ones",
         prepare_update_indications.main,
     ),
     "prepare-label-history": (
@@ -77,7 +77,6 @@ COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
         assembly.main,
     ),
 }
-
 
 def usage() -> str:
     lines = ["usage: moalmanac-fda-curation <command> [options]", "", "commands:"]

@@ -23,32 +23,33 @@ an optional second check of curator-facing evidence.
 
 1. Read [references/workflow-tools.md](references/workflow-tools.md).
 2. Check for `.venv` before installing anything. Reuse it when present; create it only
-   when absent. Run `moalmanac-fda-curation doctor` in the active environment and
+   when absent. Run `moalmanac-fda-curation check-setup` in the active environment and
    resolve failures before curation.
 3. Obtain the NDA or BLA application number. If unknown, direct the curator to search
    Drugs@FDA by drug or active ingredient; never guess it.
 4. Ask the curator for the path to their local `moalmanac-db` repository. Do not infer
    its location or search for it. Validate the supplied path using
    [references/workflow-tools.md#locate-the-moalmanac-database](references/workflow-tools.md#locate-the-moalmanac-database).
-   Before running `check-curation-preflight`, explain in curator-facing language that
+   Before running `check-curation-status`, explain in curator-facing language that
    it will check whether the application already has an FDA document in MOAlmanac. If
    it does, it will compare the date of the curated label with FDA's latest approved
    label to determine whether this is an update session. It reads the database without
    changing it and writes a local status artifact used to select the workflow. Do not
-   announce only that a “preflight check” is running.
-   Run `check-curation-preflight` before preparing a document or extracting indications,
+   call this only a generic setup or preliminary check.
+   Run `check-curation-status` before preparing a document or extracting indications,
    and persist its result inside the run's `intermediate/` directory.
-5. Present preflight as a short narrative rather than a status dump. For an existing
-   application, first say when MOAlmanac last curated it, then say that the next step is
-   checking for a newer approved label. Report the result and route exactly once:
+5. Present the curation status as a short narrative rather than a status dump. For an
+   existing application, first say when MOAlmanac last curated it, then say that the
+   next step is checking for a newer approved label. Report the result and route exactly
+   once:
    - `previously_curated: false`: read
      [references/new-curation.md](references/new-curation.md) and follow it.
    - `previously_curated: true` and `newer_label_available: false`: report that no
      newer approved label needs review and stop.
    - `previously_curated: true` and `newer_label_available: true`: read
      [references/update-curation.md](references/update-curation.md) and follow it.
-6. If preflight is ambiguous or fails, stop rather than choosing a branch from
-   filenames, drug names, or memory.
+6. If the curation status is ambiguous or the command fails, stop rather than choosing a
+   branch from filenames, drug names, or memory.
 
 Use one work directory for the session, named `analyses/<ApplicationNumber>/`, and reuse
 that path for every command. The application number is sufficient; do not perform a
