@@ -523,10 +523,24 @@ class UpdateCliTest(unittest.TestCase):
             latest_label_date="2026-08-12",
             assessment_path=Path("/tmp/assessment.json"),
             proposals_path=Path("/tmp/proposals.json"),
+            baseline_label_pdf_path=Path("/tmp/old.pdf"),
+            baseline_label_markdown_path=Path("/tmp/old.md"),
+            latest_label_pdf_path=Path("/tmp/new.pdf"),
+            latest_label_markdown_path=Path("/tmp/new.md"),
+            changelog_markdown_path=Path("/tmp/changelog.md"),
         )
-        self.assertIn("`FDA-approved` → `FDA-authorized`", markdown)
+        self.assertIn("Replaced `FDA-approved` with `FDA-authorized`", markdown)
+        self.assertIn("**Old value**", markdown)
+        self.assertIn("> Use an FDA-approved test.", markdown)
+        self.assertIn("**New value**", markdown)
+        self.assertIn("> Use an FDA-authorized test.", markdown)
         self.assertIn("MOAlmanac update proposed: yes", markdown)
         self.assertIn("### `indication`", markdown)
+        self.assertIn("[Baseline FDA label PDF", markdown)
+        self.assertIn("[Latest FDA label Markdown]", markdown)
+        self.assertIn("[Indications and Usage changelog]", markdown)
+        self.assertIn("[Revision assessment JSON]", markdown)
+        self.assertIn("[Revision proposal JSON]", markdown)
         self.assertNotIn("### `description`", markdown)
         self.assertNotIn("Full proposed indication record", markdown)
         self.assertNotIn("```diff", markdown)

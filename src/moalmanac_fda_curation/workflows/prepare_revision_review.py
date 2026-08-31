@@ -9,6 +9,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from ..core.artifacts import load_json_object, write_json_atomic
 from ..core.identify_new_indications import load_existing_indications
@@ -74,6 +75,37 @@ def changed_phrases(baseline: str, latest: str) -> list[dict[str, str | None]]:
             }
         )
     return changes
+
+
+def local_label_artifacts(work_dir: Path, label_url: str) -> tuple[Path | None, Path | None]:
+    """Find the locally cached PDF and Markdown corresponding to an FDA label URL."""
+    filename = Path(urlparse(label_url).path).name
+    if not filename:
+        return None, None
+    pdf_matches = sorted(work_dir.rglob(f"*{filename}"))
+    markdown_name = f"{Path(filename).stem}.md"
+    markdown_matches = sorted(work_dir.rglob(f"*{markdown_name}"))
+    return (
+        pdf_matches[0].resolve() if pdf_matches else None,
+        markdown_matches[0].resolve() if markdown_matches else None,
+    )
+
+
+def quote_value(value: Any) -> list[str]:
+    """Render one complete field value as a Markdown quote."""
+    rendered = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+    return [f"> {line}" for line in str(rendered).splitlines()]
+
+
+def phrase_change_markdown(change: dict[str, str | None]) -> str:
+    """Describe one deterministic word-level change without implying field semantics."""
+    removed = change.get("removed")
+    added = change.get("added")
+    if removed and added:
+        return f"- Replaced `{removed}` with `{added}`"
+    if added:
+        return f"- Added `{added}`"
+    return f"- Removed `{removed}`"
 
 
 def bounded_changelog(
@@ -207,6 +239,11 @@ def revision_markdown(
     latest_label_date: str | None,
     assessment_path: Path,
     proposals_path: Path,
+    baseline_label_pdf_path: Path | None = None,
+    baseline_label_markdown_path: Path | None = None,
+    latest_label_pdf_path: Path | None = None,
+    latest_label_markdown_path: Path | None = None,
+    changelog_markdown_path: Path | None = None,
     candidate: dict[str, Any] | None = None,
     candidates_path: Path | None = None,
 ) -> str:
@@ -245,18 +282,16 @@ def revision_markdown(
             else []
         )
         if field_phrases:
-            for phrase in field_phrases:
-                lines.append(
-                    f"- `{phrase['removed'] or '∅'}` → `{phrase['added'] or '∅'}`"
-                )
-        else:
             lines.extend(
                 [
-                    f"- Existing: `{json.dumps(old_value, ensure_ascii=False)}`",
-                    f"- Proposed: `{json.dumps(new_value, ensure_ascii=False)}`",
+                    "**Word changes (deterministic)**",
+                    "",
+                    *(phrase_change_markdown(phrase) for phrase in field_phrases),
+                    "",
                 ]
             )
-        lines.append("")
+        lines.extend(["**Old value**", "", *quote_value(old_value), ""])
+        lines.extend(["**New value**", "", *quote_value(new_value), ""])
 
     revision_event: dict[str, Any] = {}
     if candidate is not None:
@@ -291,12 +326,35 @@ def revision_markdown(
     latest_label = latest_label_date or "latest label"
     lines.extend(
         [
-            "## Sources",
+            "## Sources and artifacts",
             "",
-            f"- [Baseline FDA label — {baseline_label}](<{baseline_label_url}>)",
-            f"- [Latest FDA label — {latest_label}](<{latest_label_url}>)",
-            f"- [Complete revision assessment JSON](<{assessment_path}>)",
-            f"- [Complete revision proposals JSON](<{proposals_path}>)",
+            *(
+                [f"- [Baseline FDA label PDF — {baseline_label}](<{baseline_label_pdf_path}>)"]
+                if baseline_label_pdf_path is not None
+                else [f"- [Baseline FDA label — {baseline_label}](<{baseline_label_url}>)"]
+            ),
+            *(
+                [f"- [Baseline FDA label Markdown](<{baseline_label_markdown_path}>)"]
+                if baseline_label_markdown_path is not None
+                else []
+            ),
+            *(
+                [f"- [Latest FDA label PDF — {latest_label}](<{latest_label_pdf_path}>)"]
+                if latest_label_pdf_path is not None
+                else [f"- [Latest FDA label — {latest_label}](<{latest_label_url}>)"]
+            ),
+            *(
+                [f"- [Latest FDA label Markdown](<{latest_label_markdown_path}>)"]
+                if latest_label_markdown_path is not None
+                else []
+            ),
+            *(
+                [f"- [Indications and Usage changelog](<{changelog_markdown_path}>)"]
+                if changelog_markdown_path is not None
+                else []
+            ),
+            f"- [Revision assessment JSON](<{assessment_path}>)",
+            f"- [Revision proposal JSON](<{proposals_path}>)",
             *(
                 [f"- [Full proposed revision records](<{candidates_path}>)"]
                 if candidates_path is not None
@@ -429,6 +487,15 @@ def run(args: argparse.Namespace) -> int:
     candidates_by_id = {
         candidate["existing_indication_id"]: candidate for candidate in candidates
     }
+    baseline_pdf, baseline_markdown = local_label_artifacts(
+        work_dir, args.baseline_label_url
+    )
+    latest_pdf, latest_markdown = local_label_artifacts(
+        work_dir, args.latest_label_url
+    )
+    changelog_markdown = args.changelog_json.resolve().with_suffix(".md")
+    if not changelog_markdown.is_file():
+        changelog_markdown = None
     review_paths = []
     for item in revised:
         indication_id = item["existing_indication_id"]
@@ -445,6 +512,11 @@ def run(args: argparse.Namespace) -> int:
             latest_label_date=args.latest_label_date,
             assessment_path=assessment_path,
             proposals_path=proposals_path,
+            baseline_label_pdf_path=baseline_pdf,
+            baseline_label_markdown_path=baseline_markdown,
+            latest_label_pdf_path=latest_pdf,
+            latest_label_markdown_path=latest_markdown,
+            changelog_markdown_path=changelog_markdown,
             candidate=candidates_by_id[indication_id],
             candidates_path=candidates_path,
         )

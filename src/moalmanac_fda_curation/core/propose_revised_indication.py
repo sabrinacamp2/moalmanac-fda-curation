@@ -59,8 +59,7 @@ def build_label_diff_revision_prompt(
     }
     return f"""# Task
 
-Propose the minimal updates needed for one existing curated MOAlmanac indication
-based on its assessed changes between the baseline and current FDA labels.
+Apply the assessed FDA label changes to this existing MOAlmanac indication.
 
 # Existing editable fields
 
@@ -74,32 +73,25 @@ based on its assessed changes between the baseline and current FDA labels.
 {_json(guidance)}
 ```
 
-# Cited deterministic source-label wording changes
+# Source label changes
 
 ```json
 {_json(relevant_hunks)}
 ```
 
-# Rules
+# Instructions
 
-- The assessed `changes` define the complete scope of this proposal. Update only
-  content needed to apply those changes to the target indication.
-- Use `latest_text` in the cited label changes as the source for current wording.
-- Preserve existing drug-class wording; it may come from FDA Highlights and need not be
-  repeated in the cited changed passage.
-- A changed passage may contain other indications. Treat their wording as context only
-  and apply only the changes associated with this indication.
-- When `indication` changes, inspect `description` for the same affected wording or
-  meaning. Update corresponding language wherever the description restates the affected
-  population, biomarker, treatment, or setting. Preserve unrelated study, approval, and
-  explanatory details already present.
-- Update raw fields only when an assessed change affects their content.
-- Omit every unchanged field from `updates`.
-- If the evidence is insufficient to propose a target-specific replacement, return
-  no updates.
-- Do not add information from outside the supplied inputs.
-- Do not propose identifiers, dates, URLs, document fields, or provenance fields.
-- Return complete replacement values, not instructions or partial text fragments."""
+The assessed changes are authoritative. Apply every assessed change to the
+appropriate editable fields using the latest label wording. Do not decide whether
+a change is important or omit it because it appears minor.
+
+Preserve all unrelated content, including existing drug-class wording. If the
+indication and description express the same affected information, update both.
+If an applicable label statement containing an assessed change is missing from
+the existing record, add the complete current statement to `indication` and add
+corresponding language to `description`.
+Return complete replacement values only for fields that change. Use only the
+supplied inputs."""
 
 
 def _call_claude(prompt: str, model: str, max_tokens: int) -> dict[str, Any]:

@@ -129,9 +129,7 @@ linked source artifacts.>
 Revision decisions are not yet persisted, so do not offer accept or edit actions that
 imply a recorded state change.
 
-The review leads with whether a MOAlmanac update is proposed, lists only affected fields
-and their changed phrases, distinguishes original approval from when the revised wording
-first appeared, and links to full JSON evidence for deeper inspection.
+Present the generated revision review files one at a time.
 
 ## Confirm an edit
 
