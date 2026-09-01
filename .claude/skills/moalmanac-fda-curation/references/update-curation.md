@@ -47,11 +47,11 @@ Route from the command output:
 
 - If it reports no flagged revisions, tell the curator and stop.
 - Link only the Markdown files printed for flagged revisions, one at a time.
-- If approval evidence is unresolved, describe that revision as incomplete.
 - Do not present unchanged indications unless the curator asks.
 
 An optional harness assessment may comment on whether the proposal appears supported by
-the review file. Do not repeat the file's exact diff or proposal in chat. Revision
-decisions and update assembly are not yet persisted, so ask the curator to inspect,
-question, or flag the proposal rather than offering an accept/edit action that implies a
-recorded decision.
+the review file. Record only the curator's explicit decision. Use `accepted` to retain
+the complete proposal, or `edited` with complete replacement values for curator-changed
+fields. Use `no-change` when the label changed but no MOAlmanac field should change, and
+`unresolved` when review must be deferred. After every flagged revision is resolved, run
+`assemble-revisions`.

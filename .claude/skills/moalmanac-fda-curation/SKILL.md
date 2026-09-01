@@ -85,8 +85,7 @@ Do not reproduce or independently reimplement the command's validation logic in 
 skill. If useful, add a clearly labeled harness assessment of the generated review
 evidence without treating it as pipeline state.
 
-First-time curation and the new-indication portion of an update support recorded review
-decisions. Update-specific revision decisions and reviewed update assembly do not yet
-exist. Do not describe revision analysis artifacts as curator-approved or database-ready,
-and do not revise `moalmanac-db`, commit, push, or open a pull request without a separate
-explicit request.
+Revision proposals are analysis until the curator explicitly records `accepted`,
+`edited`, `no-change`, or `unresolved` for each flagged indication. Assemble revision
+output only after every flagged indication has a resolved decision. Do not revise `moalmanac-db`,
+commit, push, or open a pull request without a separate explicit request.

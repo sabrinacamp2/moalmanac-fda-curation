@@ -57,8 +57,10 @@ To find the application number, search the drug or active ingredient in
 [Drugs@FDA](https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm). Open the product
 record and use its NDA or BLA number, for example `NDA208558` or `BLA761174`.
 
-Completed runs write `reviewed/document.json` and `reviewed/indication.json`. Generated
-proposals remain separate from explicitly accepted curator decisions.
+First-time curation writes `reviewed/document.json` and `reviewed/indication.json`.
+Revision review writes complete structured proposals with deterministic field diffs;
+explicit curator accept/edit decisions are tracked separately and assembled into
+`reviewed/revised-indications.json`.
 
 For an application that MOAlmanac already curated and that has a newer approved label,
 the update workflow combines latest-label preparation, indication extraction, and

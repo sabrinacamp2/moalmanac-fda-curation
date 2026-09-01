@@ -118,16 +118,15 @@ indications unless the curator asks for the audit result.
 ```markdown
 [Open the flagged revision](<absolute-path-to-review/revisions/<indication-id>.md>)
 
-**Harness assessment:** <Assess whether the concise field changes are supported by the
-linked source artifacts.>
+**Harness assessment:** <Assess whether the proposal is supported by the linked
+source artifacts.>
 
-1. Inspect or question the proposed revision
-2. Inspect more source context
-3. Flag for later resolution
+1. Accept
+2. Specify field edits
+3. Record that no MOAlmanac field should change
+4. Inspect or question the proposal
+5. Mark unresolved
 ```
-
-Revision decisions are not yet persisted, so do not offer accept or edit actions that
-imply a recorded state change.
 
 Present the generated revision review files one at a time.
 

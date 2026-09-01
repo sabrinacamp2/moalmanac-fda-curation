@@ -7,11 +7,7 @@ from pathlib import Path
 
 from ..core.artifacts import load_json_object
 from ..core.identify_revised_indications import DEFAULT_MODEL as ASSESSMENT_MODEL
-from ..core.match_indication_approval_dates_from_changelog import (
-    DEFAULT_MAX_TOKENS as DATE_MAX_TOKENS,
-    DEFAULT_MODEL as DATE_MODEL,
-)
-from ..core.propose_revised_indication import DEFAULT_MODEL as PROPOSAL_MODEL
+from ..core.review_revised_indication import DEFAULT_MODEL as REVIEW_MODEL
 from .prepare_label_history import prepare_label_history
 from .prepare_revision_review import run as run_revision_review
 
@@ -22,11 +18,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--context-blocks", type=int, default=1)
     parser.add_argument("--assessment-model", default=ASSESSMENT_MODEL)
-    parser.add_argument("--proposal-model", default=PROPOSAL_MODEL)
-    parser.add_argument("--date-model", default=DATE_MODEL)
+    parser.add_argument("--review-model", default=REVIEW_MODEL)
     parser.add_argument("--assessment-max-tokens", type=int, default=8000)
-    parser.add_argument("--proposal-max-tokens", type=int, default=3000)
-    parser.add_argument("--date-max-tokens", type=int, default=DATE_MAX_TOKENS)
+    parser.add_argument("--review-max-tokens", type=int, default=3000)
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -64,11 +58,9 @@ def main() -> int:
         work_dir=work_dir,
         context_blocks=args.context_blocks,
         assessment_model=args.assessment_model,
-        proposal_model=args.proposal_model,
-        date_model=args.date_model,
+        review_model=args.review_model,
         assessment_max_tokens=args.assessment_max_tokens,
-        proposal_max_tokens=args.proposal_max_tokens,
-        date_max_tokens=args.date_max_tokens,
+        review_max_tokens=args.review_max_tokens,
         overwrite=args.overwrite,
     )
     return run_revision_review(review_args)

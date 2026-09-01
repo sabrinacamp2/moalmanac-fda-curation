@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import difflib
 import json
 import re
@@ -20,16 +19,11 @@ from ..core.identify_revised_indications import (
     identify_revised_indications,
     load_section_pair_from_cache,
 )
-from ..core.propose_revised_indication import (
-    DEFAULT_MODEL as PROPOSAL_MODEL,
-    propose_revised_indication,
+from ..core.review_revised_indication import (
+    DEFAULT_MODEL as REVIEW_MODEL,
+    review_revised_indication,
 )
-from ..core.match_indication_approval_dates_from_changelog import (
-    DEFAULT_MAX_TOKENS as DATE_MAX_TOKENS,
-    DEFAULT_MODEL as DATE_MODEL,
-    build_changelog_approval_date_matches,
-    load_changelog_payload,
-)
+from ..core.match_indication_approval_dates_from_changelog import load_changelog_payload
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,11 +39,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--context-blocks", type=int, default=1)
     parser.add_argument("--assessment-model", default=ASSESSMENT_MODEL)
-    parser.add_argument("--proposal-model", default=PROPOSAL_MODEL)
-    parser.add_argument("--date-model", default=DATE_MODEL)
+    parser.add_argument("--review-model", default=REVIEW_MODEL)
     parser.add_argument("--assessment-max-tokens", type=int, default=8000)
-    parser.add_argument("--proposal-max-tokens", type=int, default=3000)
-    parser.add_argument("--date-max-tokens", type=int, default=DATE_MAX_TOKENS)
+    parser.add_argument("--review-max-tokens", type=int, default=3000)
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -132,103 +124,6 @@ def bounded_changelog(
     return {**payload, "events": renumbered}
 
 
-def revision_date_matches(
-    revised: list[dict[str, Any]],
-    proposals: list[dict[str, Any]],
-    changelog_payload: dict[str, Any],
-    *,
-    baseline_date: str,
-    latest_date: str,
-    model: str,
-    max_tokens: int,
-) -> list[dict[str, Any]]:
-    """Run the existing indication matcher over the bounded changelog."""
-    proposal_by_id = {
-        proposal["existing_indication_id"]: proposal for proposal in proposals
-    }
-    indications = []
-    for item in revised:
-        indication_id = item["existing_indication_id"]
-        proposal = proposal_by_id.get(indication_id)
-        if proposal is None:
-            raise ValueError(f"No revision proposal exists for {indication_id}")
-        indications.append(
-            {
-                **proposal["proposed_indication"],
-                "source_chunk_index": 0,
-            }
-        )
-    bounded = bounded_changelog(changelog_payload, baseline_date, latest_date)
-    chunked = {
-        "source_chunks": [
-            {
-                "source_chunk_index": 0,
-                "source_chunk_text": "Revision proposal generated from the label diff.",
-            }
-        ],
-        "indications": indications,
-    }
-    return build_changelog_approval_date_matches(
-        chunked_indications=chunked,
-        changelog_markdown=build_section1_changelog_markdown(bounded),
-        changelog_payload=bounded,
-        model=model,
-        max_tokens=max_tokens,
-        requested_indexes=None,
-    )
-
-
-def assemble_revision_candidates(
-    revised: list[dict[str, Any]],
-    proposals: list[dict[str, Any]],
-    date_matches: list[dict[str, Any]],
-    *,
-    baseline_date: str,
-) -> list[dict[str, Any]]:
-    """Apply verified later-event provenance to full proposed indications."""
-    if len(date_matches) != len(revised):
-        raise ValueError(
-            "Revision approval evidence must contain one result per revised indication"
-        )
-    proposals_by_id = {
-        proposal["existing_indication_id"]: proposal for proposal in proposals
-    }
-    output = []
-    for index, item in enumerate(revised):
-        indication_id = item["existing_indication_id"]
-        proposal = proposals_by_id[indication_id]
-        date_match = date_matches[index]
-        matched_indication = date_match.get("indication") or {}
-        if matched_indication.get("id") not in {None, indication_id}:
-            raise ValueError(
-                f"Revision approval evidence {index} targets "
-                f"{matched_indication.get('id')}, not {indication_id}"
-            )
-        verification = date_match.get("verification") or {}
-        event = verification.get("matched_event") or {}
-        resolved = bool(
-            verification.get("verified")
-            and event
-            and isinstance(event.get("date"), str)
-            and event["date"] > baseline_date
-            and isinstance(event.get("label_url"), str)
-        )
-        proposed_indication = copy.deepcopy(proposal["proposed_indication"])
-        if resolved:
-            proposed_indication["initial_approval_date"] = event["date"]
-            proposed_indication["initial_approval_url"] = event["label_url"]
-        output.append(
-            {
-                "existing_indication_id": indication_id,
-                "complete": resolved,
-                "proposed_indication": proposed_indication,
-                "field_changes": proposal.get("changes") or {},
-                "date_match": date_match,
-            }
-        )
-    return output
-
-
 def revision_markdown(
     assessment: dict[str, Any],
     proposal: dict[str, Any],
@@ -239,88 +134,53 @@ def revision_markdown(
     latest_label_date: str | None,
     assessment_path: Path,
     proposals_path: Path,
+    reconciliation_path: Path,
     baseline_label_pdf_path: Path | None = None,
     baseline_label_markdown_path: Path | None = None,
     latest_label_pdf_path: Path | None = None,
     latest_label_markdown_path: Path | None = None,
     changelog_markdown_path: Path | None = None,
-    candidate: dict[str, Any] | None = None,
-    candidates_path: Path | None = None,
 ) -> str:
     existing = assessment["existing_indication"]
-    changes = proposal.get("changes") or {}
+    proposed = proposal["proposed_indication"]
+    changed_fields = [
+        field
+        for field in (
+            "indication",
+            "description",
+            "raw_biomarkers",
+            "raw_cancer_type",
+            "raw_therapeutics",
+        )
+        if existing.get(field) != proposed.get(field)
+    ]
     display_name = existing.get("raw_cancer_type") or assessment["existing_indication_id"]
+    event = proposal["revision_event"]
     lines = [
         f"# Revision review — {display_name}",
         "",
         f"- Indication ID: `{assessment['existing_indication_id']}`",
+        f"- Proposed revision date: [{event['date']}](<{event['label_url']}>)",
         "",
-        "## Result",
+        "## Recommendation",
         "",
-        f"- MOAlmanac update proposed: {'yes' if changes else 'no'}",
-        f"- Fields affected: {', '.join(f'`{field}`' for field in changes) if changes else 'none'}",
-        "- Label changes: "
-        + "; ".join(assessment.get("changes") or ["Not provided"]),
+        proposal["rationale"],
+        "",
+        "## Proposed changes",
+        "",
+        f"- Fields affected: {', '.join(f'`{field}`' for field in changed_fields) or 'none'}",
+        "",
     ]
-    if not changes:
-        lines.extend(
-            [
-                "",
-                "The FDA label changed, but the changed wording is not represented in",
-                "this MOAlmanac indication record.",
-                "",
-            ]
-        )
-    else:
-        lines.extend(["", "## Proposed field changes", ""])
-    for field, new_value in changes.items():
-        lines.extend([f"### `{field}`", ""])
+    for field in changed_fields:
         old_value = existing.get(field)
-        field_phrases = (
-            changed_phrases(old_value, new_value)
-            if isinstance(old_value, str) and isinstance(new_value, str)
-            else []
-        )
-        if field_phrases:
-            lines.extend(
-                [
-                    "**Word changes (deterministic)**",
-                    "",
-                    *(phrase_change_markdown(phrase) for phrase in field_phrases),
-                    "",
-                ]
-            )
-        lines.extend(["**Old value**", "", *quote_value(old_value), ""])
-        lines.extend(["**New value**", "", *quote_value(new_value), ""])
-
-    revision_event: dict[str, Any] = {}
-    if candidate is not None:
-        revision_event = (
-            ((candidate.get("date_match") or {}).get("verification") or {}).get(
-                "matched_event"
-            )
-            or {}
-        )
-
-    original_date = existing.get("initial_approval_date") or "Not available"
-    original_url = existing.get("initial_approval_url")
-    original_display = f"[{original_date}](<{original_url}>)" if original_url else original_date
-    revision_date = revision_event.get("date")
-    revision_url = revision_event.get("label_url")
-    revision_display = (
-        f"[{revision_date}](<{revision_url}>)"
-        if revision_date and revision_url
-        else "Unresolved"
-    )
-    lines.extend(
-        [
-            "## Dates",
-            "",
-            f"- Original indication approval: {original_display}",
-            f"- Revised wording first appeared: {revision_display}",
-            "",
-        ]
-    )
+        new_value = proposed.get(field)
+        lines.extend([f"### `{field}`", ""])
+        if isinstance(old_value, str) and isinstance(new_value, str):
+            phrases = changed_phrases(old_value, new_value)
+            lines.extend(phrase_change_markdown(change) for change in phrases)
+            lines.append("")
+        lines.extend(["**Old**", "", *quote_value(old_value), ""])
+        lines.extend(["**Proposed**", "", *quote_value(new_value), ""])
 
     baseline_label = baseline_label_date or "curated baseline label"
     latest_label = latest_label_date or "latest label"
@@ -354,12 +214,8 @@ def revision_markdown(
                 else []
             ),
             f"- [Revision assessment JSON](<{assessment_path}>)",
-            f"- [Revision proposal JSON](<{proposals_path}>)",
-            *(
-                [f"- [Full proposed revision records](<{candidates_path}>)"]
-                if candidates_path is not None
-                else []
-            ),
+            f"- [Indication matching JSON](<{reconciliation_path}>)",
+            f"- [Revision proposals JSON](<{proposals_path}>)",
             "",
         ]
     )
@@ -371,8 +227,7 @@ def run(args: argparse.Namespace) -> int:
     intermediate = work_dir / "intermediate"
     assessment_path = intermediate / "revision-assessment.json"
     proposals_path = intermediate / "revision-proposals.json"
-    date_matches_path = intermediate / "revision-approval-evidence.json"
-    candidates_path = intermediate / "revision-indications.proposal.json"
+    reconciliation_path = intermediate / "indication-reconciliation.json"
     review_dir = work_dir / "review" / "revisions"
 
     if assessment_path.exists() and not args.overwrite:
@@ -416,6 +271,35 @@ def run(args: argparse.Namespace) -> int:
         item for item in result.get("assessments") or [] if item.get("status") == "revised"
     ]
 
+    reconciliation = load_json_object(
+        reconciliation_path, "Indication matching artifact"
+    )
+    matched_latest_by_id: dict[str, dict[str, Any]] = {}
+    for mapping in reconciliation.get("mappings") or []:
+        indication_id = mapping.get("existing_indication_id")
+        latest = mapping.get("latest_indication")
+        if mapping.get("classification") == "matched" and isinstance(latest, dict):
+            if indication_id in matched_latest_by_id:
+                raise ValueError(f"Multiple latest indications matched {indication_id}")
+            matched_latest_by_id[indication_id] = latest
+    missing_latest = [
+        item["existing_indication_id"]
+        for item in revised
+        if item["existing_indication_id"] not in matched_latest_by_id
+    ]
+    if missing_latest:
+        raise ValueError(
+            "Flagged revisions require matched latest-label indications: "
+            + ", ".join(missing_latest)
+        )
+
+    changelog_payload = load_changelog_payload(args.changelog_json.resolve())
+    bounded = bounded_changelog(
+        changelog_payload,
+        args.baseline_label_date,
+        args.latest_label_date,
+    )
+    bounded_changelog_markdown = build_section1_changelog_markdown(bounded)
     if proposals_path.exists() and not args.overwrite:
         proposal_payload = load_json_object(
             proposals_path, "Revision proposal artifact"
@@ -424,16 +308,40 @@ def run(args: argparse.Namespace) -> int:
         if not isinstance(proposals, list):
             raise ValueError("Revision proposal artifact must contain proposals")
     else:
-        proposals = [
-            propose_revised_indication(
+        proposals = []
+        for item in revised:
+            response = review_revised_indication(
                 item["existing_indication"],
+                matched_latest_by_id[item["existing_indication_id"]],
                 item,
                 diff_hunks,
-                model=args.proposal_model,
-                max_tokens=args.proposal_max_tokens,
+                bounded_changelog_markdown,
+                model=args.review_model,
+                max_tokens=args.review_max_tokens,
             )
-            for item in revised
-        ]
+            event_number = response["revision_event_number"]
+            if event_number < 1 or event_number > len(bounded["events"]):
+                raise ValueError(f"Revision selected nonexistent changelog event {event_number}")
+            event = bounded["events"][event_number - 1]
+            if event.get("date", "") <= args.baseline_label_date:
+                raise ValueError("Revision event must be later than the curated baseline label")
+            if not isinstance(event.get("label_url"), str):
+                raise ValueError("Revision event must provide an FDA label URL")
+            proposed = {
+                **item["existing_indication"],
+                **response["proposed_fields"],
+                "initial_approval_date": event["date"],
+                "initial_approval_url": event["label_url"],
+            }
+            proposals.append(
+                {
+                    "existing_indication_id": item["existing_indication_id"],
+                    "rationale": response["rationale"],
+                    "revision_event_number": event_number,
+                    "revision_event": event,
+                    "proposed_indication": proposed,
+                }
+            )
         proposal_payload = {
             "document_id": args.document_id,
             "assessment_artifact": str(assessment_path),
@@ -442,50 +350,8 @@ def run(args: argparse.Namespace) -> int:
         write_json_atomic(proposals_path, proposal_payload)
 
     proposals_by_id = {
-        proposal.get("existing_indication_id"): proposal for proposal in proposals
-    }
-    if not revised:
-        date_matches = []
-        write_json_atomic(date_matches_path, date_matches)
-    elif date_matches_path.exists() and not args.overwrite:
-        date_matches_payload = json.loads(date_matches_path.read_text(encoding="utf-8"))
-        if not isinstance(date_matches_payload, list):
-            raise ValueError("Revision approval evidence must contain a JSON list")
-        date_matches = date_matches_payload
-    else:
-        date_matches = revision_date_matches(
-            revised,
-            proposals,
-            load_changelog_payload(args.changelog_json.resolve()),
-            baseline_date=args.baseline_label_date,
-            latest_date=args.latest_label_date,
-            model=args.date_model,
-            max_tokens=args.date_max_tokens,
-        )
-        write_json_atomic(date_matches_path, date_matches)
-
-    candidates = assemble_revision_candidates(
-        revised,
-        proposals,
-        date_matches,
-        baseline_date=args.baseline_label_date,
-    )
-    complete_indications = [
-        candidate["proposed_indication"]
-        for candidate in candidates
-        if candidate["complete"]
-    ]
-    if candidates_path.exists() and not args.overwrite:
-        existing_candidates = json.loads(candidates_path.read_text(encoding="utf-8"))
-        if existing_candidates != complete_indications:
-            raise FileExistsError(
-                f"Revision indication proposals differ from {candidates_path}; "
-                "use --overwrite after confirming regeneration"
-            )
-    else:
-        write_json_atomic(candidates_path, complete_indications)
-    candidates_by_id = {
-        candidate["existing_indication_id"]: candidate for candidate in candidates
+        item.get("existing_indication_id"): item
+        for item in proposals
     }
     baseline_pdf, baseline_markdown = local_label_artifacts(
         work_dir, args.baseline_label_url
@@ -500,7 +366,7 @@ def run(args: argparse.Namespace) -> int:
     for item in revised:
         indication_id = item["existing_indication_id"]
         proposal = proposals_by_id.get(indication_id)
-        if proposal is None:
+        if not isinstance(proposal, dict):
             raise ValueError(f"No revision proposal exists for {indication_id}")
         path = review_dir / f"{slugify(indication_id)}.md"
         markdown = revision_markdown(
@@ -512,13 +378,12 @@ def run(args: argparse.Namespace) -> int:
             latest_label_date=args.latest_label_date,
             assessment_path=assessment_path,
             proposals_path=proposals_path,
+            reconciliation_path=reconciliation_path,
             baseline_label_pdf_path=baseline_pdf,
             baseline_label_markdown_path=baseline_markdown,
             latest_label_pdf_path=latest_pdf,
             latest_label_markdown_path=latest_markdown,
             changelog_markdown_path=changelog_markdown,
-            candidate=candidates_by_id[indication_id],
-            candidates_path=candidates_path,
         )
         if path.exists() and not args.overwrite:
             if path.read_text(encoding="utf-8") != markdown:
@@ -539,13 +404,8 @@ def run(args: argparse.Namespace) -> int:
         print("Revision reviews: none")
     for path in review_paths:
         print(f"Revision review: {path}")
-    unresolved = [
-        item["existing_indication_id"] for item in candidates if not item["complete"]
-    ]
-    if unresolved:
-        print("Unresolved revision approval evidence: " + ", ".join(unresolved))
-    if complete_indications:
-        print(f"Full proposed revision records: {candidates_path}")
+    if revised:
+        print("Accept or edit each revision before assembling revised indications")
     return 0
 
 
