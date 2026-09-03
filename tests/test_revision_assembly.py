@@ -1,12 +1,118 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from moalmanac_fda_curation.review import revision_assembly
 from moalmanac_fda_curation.review.revision_assembly import (
+    assemble_document_updates,
     assemble_updated_indications,
 )
 
 
 class RevisionAssemblyTest(unittest.TestCase):
+    def test_cli_writes_targeted_and_materialized_document_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            work = root / "run"
+            intermediate = work / "intermediate"
+            review = work / "review"
+            database = root / "database" / "referenced"
+            for path in (intermediate, review, database):
+                path.mkdir(parents=True)
+            existing_document = {
+                "id": "doc:fda.example",
+                "publication_date": "2024-01-01",
+                "description": "Old citation",
+                "urls": ["url:fda.example:label"],
+            }
+            latest_document = {
+                "id": "doc:fda.example",
+                "publication_date": "2026-01-02",
+                "description": "New citation",
+                "urls": ["https://example.test/latest.pdf"],
+            }
+            (database / "documents.json").write_text(json.dumps([existing_document]))
+            (database / "urls.json").write_text(json.dumps([{
+                "id": "url:fda.example:label",
+                "url": "https://example.test/old.pdf",
+            }]))
+            (intermediate / "document.proposal.json").write_text(json.dumps(latest_document))
+            (intermediate / "revision-targets.json").write_text(json.dumps({
+                "document_id": "doc:fda.example",
+                "targets": [],
+            }))
+            (intermediate / "Example-claude_chunked_indication_fields.json").write_text(
+                json.dumps({"indications": []})
+            )
+            (intermediate / "selected-revision-description-proposals.json").write_text(
+                json.dumps({"indications": []})
+            )
+            (intermediate / "selected-revision-date-evidence.json").write_text("[]")
+            (review / "decisions.json").write_text(json.dumps({
+                "schema_version": 1,
+                "document": {},
+                "indications": {},
+            }))
+            argv = [
+                "assemble-revisions",
+                "--work-dir", str(work),
+                "--database-dir", str(root / "database"),
+            ]
+            with patch("sys.argv", argv):
+                self.assertEqual(revision_assembly.main(), 0)
+            reviewed = work / "reviewed"
+            self.assertEqual(
+                json.loads((reviewed / "document-update.json").read_text())["updates"]
+                ["publication_date"],
+                "2026-01-02",
+            )
+            self.assertEqual(
+                json.loads((reviewed / "revised-url.json").read_text())["url"],
+                "https://example.test/latest.pdf",
+            )
+
+    def test_document_update_changes_only_allow_list_and_label_url(self) -> None:
+        existing = {
+            "id": "doc:fda.example",
+            "name": "Curated name",
+            "company": "Curated Company.",
+            "publication_date": "2024-01-01",
+            "description": "Old citation",
+            "urls": ["url:fda.example:label", "url:fda.example:overview"],
+        }
+        latest = {
+            "id": "doc:fda.example",
+            "name": "Generated different name",
+            "company": "Generated Company",
+            "publication_date": "2026-02-03",
+            "description": "New citation",
+            "urls": [
+                "https://example.test/2026-label.pdf",
+                "https://example.test/overview",
+            ],
+        }
+        existing_url = {
+            "id": "url:fda.example:label",
+            "url": "https://example.test/2024-label.pdf",
+        }
+        document_patch, document, url_patch, url = assemble_document_updates(
+            existing, latest, existing_url
+        )
+        self.assertEqual(document_patch["updates"], {
+            "publication_date": "2026-02-03",
+            "description": "New citation",
+        })
+        self.assertEqual(document["name"], "Curated name")
+        self.assertEqual(document["company"], "Curated Company.")
+        self.assertEqual(document["urls"], existing["urls"])
+        self.assertEqual(url_patch["updates"]["url"], latest["urls"][0])
+        self.assertEqual(url["id"], existing_url["id"])
+        self.assertEqual(url["url"], latest["urls"][0])
+
     def setUp(self) -> None:
         self.existing = {
             "id": "ind:fda.example:7",

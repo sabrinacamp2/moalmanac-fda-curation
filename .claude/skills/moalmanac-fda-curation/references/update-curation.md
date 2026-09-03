@@ -61,6 +61,7 @@ Route from the command output:
 - Do not present unchanged indications unless the curator asks.
 
 After description and current-form date are resolved for every selected update, run
-`assemble-revisions` and report the path to `reviewed/revised-indications.json`. The
+`assemble-revisions --database-dir MOALMANAC_DB_ROOT` and report the paths to the
+reviewed document, URL, indication, and targeted update artifacts. The
 curator already compared old and new values in the preceding reviews, so this finalization
 does not require another decision.

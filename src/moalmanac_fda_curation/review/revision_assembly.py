@@ -1,4 +1,4 @@
-"""Assemble curator-approved updates to existing MOAlmanac indications."""
+"""Assemble targeted document, URL, and indication updates for a newer FDA label."""
 
 from __future__ import annotations
 
@@ -8,9 +8,44 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..core.artifacts import load_json_object, write_json_atomic
+from ..core.artifacts import document_label_url, load_json_object, write_json_atomic
 from .assembly import accepted_entry, indexed, load_json_list
 from .decisions import load_decisions, verify_decision_sources
+
+
+def one_by_id(items: list[dict[str, Any]], item_id: str, name: str) -> dict[str, Any]:
+    """Return exactly one database record with the requested ID."""
+    matches = [item for item in items if item.get("id") == item_id]
+    if len(matches) != 1:
+        raise ValueError(f"Expected exactly one {name} with id {item_id}; found {len(matches)}")
+    return matches[0]
+
+
+def assemble_document_updates(
+    existing_document: dict[str, Any],
+    latest_document: dict[str, Any],
+    existing_label_url: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Apply the allow-listed newer-label fields and materialize full records."""
+    if existing_document.get("id") != latest_document.get("id"):
+        raise ValueError("Existing and latest document IDs do not match")
+    document_updates = {
+        "publication_date": latest_document.get("publication_date"),
+        "description": latest_document.get("description"),
+    }
+    if not all(isinstance(value, str) and value for value in document_updates.values()):
+        raise ValueError("Latest document is missing publication_date or description")
+    latest_label_url = document_label_url(latest_document)
+    revised_document = copy.deepcopy(existing_document)
+    revised_document.update(document_updates)
+    revised_url = copy.deepcopy(existing_label_url)
+    revised_url["url"] = latest_label_url
+    return (
+        {"document_id": existing_document["id"], "updates": document_updates},
+        revised_document,
+        {"url_id": existing_label_url["id"], "updates": {"url": latest_label_url}},
+        revised_url,
+    )
 
 
 def assemble_updated_indications(
@@ -74,6 +109,7 @@ def assemble_updated_indications(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work-dir", type=Path, required=True)
+    parser.add_argument("--database-dir", type=Path, required=True)
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -89,9 +125,20 @@ def main() -> int:
     args = parse_args()
     work_dir = args.work_dir.resolve()
     intermediate = work_dir / "intermediate"
-    output = work_dir / "reviewed" / "revised-indications.json"
-    if output.exists() and not args.overwrite:
-        raise FileExistsError(f"Reviewed revision output already exists: {output}")
+    reviewed_dir = work_dir / "reviewed"
+    outputs = {
+        "indications": reviewed_dir / "revised-indications.json",
+        "document_patch": reviewed_dir / "document-update.json",
+        "document": reviewed_dir / "revised-document.json",
+        "url_patch": reviewed_dir / "url-update.json",
+        "url": reviewed_dir / "revised-url.json",
+    }
+    existing_outputs = [path for path in outputs.values() if path.exists()]
+    if existing_outputs and not args.overwrite:
+        raise FileExistsError(
+            "Reviewed revision output already exists: "
+            + ", ".join(str(path) for path in existing_outputs)
+        )
     targets = load_json_object(intermediate / "revision-targets.json", "Revision targets")
     decisions = load_decisions(work_dir / "review" / "decisions.json")
     verify_decision_sources(decisions)
@@ -111,8 +158,34 @@ def main() -> int:
         ),
         decisions,
     )
-    write_json_atomic(output, revised)
-    print(f"Wrote {output} ({len(revised)} revised indications)")
+    database_dir = args.database_dir.resolve() / "referenced"
+    documents = load_json_list(database_dir / "documents.json", "Documents")
+    urls = load_json_list(database_dir / "urls.json", "URLs")
+    latest_document = load_json_object(
+        intermediate / "document.proposal.json", "Latest document proposal"
+    )
+    existing_document = one_by_id(documents, targets["document_id"], "document")
+    label_url_id = next(
+        (item for item in existing_document.get("urls") or [] if str(item).endswith(":label")),
+        None,
+    )
+    if not label_url_id:
+        raise ValueError(f"{existing_document['id']} does not reference a label URL")
+    document_patch, revised_document, url_patch, revised_url = assemble_document_updates(
+        existing_document,
+        latest_document,
+        one_by_id(urls, label_url_id, "URL"),
+    )
+    for key, payload in (
+        ("indications", revised),
+        ("document_patch", document_patch),
+        ("document", revised_document),
+        ("url_patch", url_patch),
+        ("url", revised_url),
+    ):
+        write_json_atomic(outputs[key], payload)
+        print(f"Wrote {outputs[key]}")
+    print(f"Assembled {len(revised)} revised indications")
     return 0
 
 

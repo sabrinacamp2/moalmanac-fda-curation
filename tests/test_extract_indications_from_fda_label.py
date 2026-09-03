@@ -3,9 +3,32 @@ from __future__ import annotations
 import unittest
 
 from moalmanac_fda_curation.core.extract_indications_from_fda_label import (
+    build_chunk_indication_prompt,
     extract_highlights_drug_class,
     extract_section,
 )
+
+
+class IndicationPromptTest(unittest.TestCase):
+    def test_repeats_shared_companion_diagnostic_for_applicable_indications(self) -> None:
+        prompt = build_chunk_indication_prompt(
+            {
+                "source_chunk_text": (
+                    "Drug is indicated for:\n"
+                    "- population A\n"
+                    "- population B\n"
+                    "Select patients using a companion diagnostic."
+                )
+            },
+            "Example",
+            "examplemab",
+            None,
+        )
+        self.assertIn(
+            "repeat it in every applicable extracted indication",
+            prompt,
+        )
+        self.assertIn("subsection or scope established by the source text", prompt)
 
 
 class ExtractHighlightsDrugClassTest(unittest.TestCase):

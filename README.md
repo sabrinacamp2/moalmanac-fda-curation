@@ -82,7 +82,8 @@ indications and creates a short screening review for each one. Record whether to
 the latest-label proposal, keep the existing record, or leave the choice unresolved.
 Then `prepare-revision-reviews` prepares description and current-form date reviews only
 for indications moving to the latest-label proposal. `assemble-revisions`
-preserves existing indication IDs and writes the approved revised records.
+preserves existing IDs and writes the approved indication records together with
+targeted and fully materialized document and label-URL updates.
 
 ## Manual setup and troubleshooting
 

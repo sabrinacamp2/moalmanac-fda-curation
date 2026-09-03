@@ -192,12 +192,14 @@ curator approval.
 For an update session, assemble resolved revisions separately:
 
 ```bash
-moalmanac-fda-curation assemble-revisions --work-dir RUN_DIR
+moalmanac-fda-curation assemble-revisions \
+  --work-dir RUN_DIR \
+  --database-dir MOALMANAC_DB_ROOT
 ```
 
-This preserves existing indication IDs and writes `reviewed/revised-indications.json`
-from the resolved screening, description, and date decisions. It refuses stale or
-unresolved review state.
+This preserves existing IDs and writes complete revised document, label URL, and
+indication records plus targeted document and URL update artifacts under `reviewed/`.
+It refuses stale or unresolved review state.
 
 After recording an edit, show only the resolved edited field/value from the rebuilt
 review packet in chat and obtain confirmation before continuing.

@@ -335,6 +335,9 @@ Rules:
 - Preserve raw wording for the helper fields where possible.
 - Repeat shared indication stems when the text contains multiple standalone indications.
 - Keep directly related patient-selection, companion diagnostic, limitation-of-use, accelerated approval, continued approval, and other regulatory qualifier text with the indication it modifies.
+- When one patient-selection or companion-diagnostic statement applies to multiple
+  standalone indications, repeat it in every applicable extracted indication. Apply
+  it only within the subsection or scope established by the source text.
 - Do not split bullets that are alternatives, criteria, limitations, or patient-selection
   details under the same indication; fold them into the parent indication.
 - If a Highlights drug-class phrase is provided, combine that phrase with each
