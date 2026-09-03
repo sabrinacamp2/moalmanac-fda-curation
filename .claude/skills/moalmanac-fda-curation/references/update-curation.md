@@ -40,22 +40,27 @@ moalmanac-fda-curation find-revised-indications \
   --work-dir RUN_DIR
 ```
 
-Do not narrate label-history downloads, caches, date coverage checks, or approval-date
-matching. The command owns those mechanics and should surface them only when it cannot
-complete the assessment.
+Describe this as checking whether existing indications changed. The command owns the
+label-history and comparison mechanics and surfaces them only when it cannot complete
+the assessment.
 
 Route from the command output:
 
 - If it reports no changed matched indications, tell the curator and stop.
-- For each reported index, use the indication, description, and current-form date review
-  steps in [new-curation.md#review-vertically](new-curation.md#review-vertically).
-  Present one indication and one stage at a time, recording each explicit decision with
+- Present each revision-screening Markdown file one at a time. Ask whether to use the
+  latest-label proposal, edit it before use, keep the existing record, or leave the
+  candidate unresolved. Persist the answer with `record-decision --stage revision`
+  using `use_latest`, `keep_existing`, or `unresolved`; pass approved edits as overrides
+  with `use_latest`.
+- After every screening decision is resolved, run `prepare-revision-reviews`. For each
+  selected index, review its description and current-form date in that order. Present
+  one indication and one stage at a time, recording each explicit decision with
   `record-decision`.
 - For a changed existing indication, offer accept, edit, inspect, question, or unresolved
   outcomes. Keep the indication in the revision set while its mapping remains valid.
 - Do not present unchanged indications unless the curator asks.
 
-After all three stages are resolved for every changed indication, run
+After description and current-form date are resolved for every selected update, run
 `assemble-revisions`. Present its comparison Markdown files one at a time and ask whether
 the newly curated record omitted anything important or introduced anything unsupported. If
 a correction is needed, edit the relevant stage decision and reassemble.

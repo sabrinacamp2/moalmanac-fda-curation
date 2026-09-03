@@ -15,6 +15,7 @@ from .workflows import (
     find_revised_indications,
     prepare_document,
     prepare_selected,
+    prepare_revision_reviews,
     prepare_update_indications,
     reconcile_indications,
 )
@@ -52,6 +53,10 @@ COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
     "prepare-selected-review": (
         "Prepare descriptions, approval evidence, and review files for selected indications",
         prepare_selected.main,
+    ),
+    "prepare-revision-reviews": (
+        "Prepare detailed reviews for revisions selected by the curator",
+        prepare_revision_reviews.main,
     ),
     "record-decision": (
         "Record a curator decision and refresh its review file",

@@ -121,7 +121,7 @@ or cannot be matched confidently, the command writes one evidence file per mappi
 curate any printed new-indication indexes, or proceed directly to revision analysis when
 there are none.
 
-Find changed indications and prepare their standard curation reviews in one command:
+Find changed indications and prepare their screening files in one command:
 
 ```bash
 moalmanac-fda-curation find-revised-indications \
@@ -129,8 +129,14 @@ moalmanac-fda-curation find-revised-indications \
   --work-dir RUN_DIR
 ```
 
+After revision screening decisions are recorded:
+
+```bash
+moalmanac-fda-curation prepare-revision-reviews --work-dir RUN_DIR
+```
+
 The command prints the latest-label indexes prepared for review. Review each through its
-indication, description, and current-form date files, one stage at a time. Its JSON
+description and current-form date files, one stage at a time. Its JSON
 artifacts remain under `intermediate/`; do not present them unless requested.
 
 The tool chooses stable filenames:
@@ -138,6 +144,7 @@ The tool chooses stable filenames:
 ```text
 review/document.md
 review/indication-candidates.md
+review/revision-screening/<display-name-slug>.md
 review/indications/<display-name-slug>/indication.md
 review/indications/<display-name-slug>/description.md
 review/indications/<display-name-slug>/approval.md
@@ -157,8 +164,9 @@ moalmanac-fda-curation record-decision \
   --decision accepted
 ```
 
-Valid stages are `document`, `indication`, `description`, and `approval`. Valid
-decisions are `accepted`, `edited`, `excluded`, and `unresolved`.
+Valid stages are `document`, `revision`, `indication`, `description`, and `approval`.
+Revision screening uses `use_latest`, `keep_existing`, or `unresolved`; the other stages
+use `accepted`, `edited`, `excluded`, or `unresolved` as applicable.
 
 For an approved edit, repeat `--override FIELD=JSON_VALUE`. Example:
 

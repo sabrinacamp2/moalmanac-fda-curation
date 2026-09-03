@@ -86,7 +86,7 @@ skill. If useful, add a clearly labeled harness assessment of the generated revi
 evidence without treating it as pipeline state.
 
 For changed indications, assemble revision output only after the curator resolves the
-indication, description, and current-form date reviews. Present the deterministic
+revision screening, description, and current-form date reviews. Present the deterministic
 existing-versus-newly-curated comparison before considering the revision complete. Do not
 revise `moalmanac-db`, commit, push, or open a pull request without a separate explicit
 request.

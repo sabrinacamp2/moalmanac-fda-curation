@@ -75,6 +75,23 @@ the proposal or source into chat.>
 5. Ask a question
 ```
 
+## Revision screening in chat
+
+Present each possible revision before preparing detailed curation reviews.
+
+```markdown
+[Open the possible revision](<absolute-path-to/review/revision-screening/<slug>.md>)
+
+**Harness assessment:** <Assess whether the displayed source change affects the existing
+MOAlmanac record without restating the evidence.>
+
+1. Use the latest-label proposal
+2. Edit the proposal, then use it
+3. Keep the existing record unchanged
+4. Leave unresolved
+5. Ask a question
+```
+
 ## Description review in chat
 
 ```markdown
@@ -116,7 +133,8 @@ form; the file displays the previous curated label date for that comparison.
 
 ## Final revision comparison in chat
 
-After the three standard review stages are complete, present the deterministic
+After revision screening, description review, and current-form date review are complete,
+present the deterministic
 comparison for one newly curated indication at a time.
 
 ```markdown

@@ -326,22 +326,17 @@ def event_by_number(
     changelog_events: list[dict[str, Any]],
     event_number: int | None,
 ) -> dict[str, Any] | None:
-    """Return the changelog event with a 1-based event number."""
+    """Return the changelog event with the requested persistent event number."""
     if event_number is None:
         return None
-    if event_number < 1 or event_number > len(changelog_events):
-        return None
-    event = changelog_events[event_number - 1]
-    if event.get("event_number") != event_number:
-        return next(
-            (
-                candidate
-                for candidate in changelog_events
-                if candidate.get("event_number") == event_number
-            ),
-            None,
-        )
-    return event
+    return next(
+        (
+            event
+            for event in changelog_events
+            if event.get("event_number") == event_number
+        ),
+        None,
+    )
 
 
 def quote_in_text(quote: str | None, text: str | None) -> bool:

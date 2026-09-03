@@ -78,10 +78,12 @@ indication is not found or a mapping is uncertain, review the corresponding file
 indication indexes printed by the command and then proceed to revision analysis.
 
 Revision analysis uses `find-revised-indications`. It identifies changed matched
-indications and prepares the standard indication, description, and current-form date
-reviews for their latest-label counterparts. `assemble-revisions` preserves existing
-indication IDs and creates compact deterministic old-versus-new comparisons alongside
-the revised records.
+indications and creates a short screening review for each one. Record whether to use
+the latest-label proposal, keep the existing record, or leave the choice unresolved.
+Then `prepare-revision-reviews` prepares description and current-form date reviews only
+for indications moving to the latest-label proposal. `assemble-revisions`
+preserves existing indication IDs and creates compact deterministic old-versus-new
+comparisons alongside the revised records.
 
 ## Manual setup and troubleshooting
 

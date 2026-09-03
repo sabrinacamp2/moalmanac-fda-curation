@@ -9,17 +9,84 @@ from pathlib import Path
 from unittest.mock import patch
 
 from moalmanac_fda_curation import cli
+from moalmanac_fda_curation.core.match_indication_approval_dates_from_changelog import (
+    event_by_number,
+)
 from moalmanac_fda_curation.workflows import (
     check_preflight,
     find_revised_indications,
     prepare_approval,
     prepare_label_history,
+    prepare_revision_reviews,
     prepare_update_indications,
     reconcile_indications,
 )
 
 
 class UpdateCliTest(unittest.TestCase):
+    def test_only_curator_selected_revisions_are_prepared(self) -> None:
+        targets = {
+            "targets": [
+                {"latest_indication_index": 1},
+                {"latest_indication_index": 2},
+            ]
+        }
+        decisions = {
+            "indications": {
+                "1": {"revision": {"decision": "use_latest"}},
+                "2": {"revision": {"decision": "keep_existing"}},
+            }
+        }
+        self.assertEqual(
+            prepare_revision_reviews.selected_revision_indexes(targets, decisions), [1]
+        )
+
+    def test_unresolved_revision_screening_blocks_preparation(self) -> None:
+        targets = {"targets": [{"latest_indication_index": 1}]}
+        with self.assertRaisesRegex(ValueError, "remain unresolved"):
+            prepare_revision_reviews.selected_revision_indexes(targets, {"indications": {}})
+
+    def test_prepare_revision_reviews_runs_only_selected_indexes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            work_dir = Path(directory)
+            intermediate = work_dir / "intermediate"
+            review = work_dir / "review"
+            intermediate.mkdir()
+            review.mkdir()
+            (intermediate / "revision-targets.json").write_text(json.dumps({
+                "baseline_label_date": "2025-04-11",
+                "targets": [
+                    {"latest_indication_index": 1},
+                    {"latest_indication_index": 2},
+                ],
+            }))
+            (review / "decisions.json").write_text(json.dumps({
+                "schema_version": 1,
+                "document": {},
+                "indications": {
+                    "1": {"revision": {"decision": "use_latest", "source_sha256": {}}},
+                    "2": {"revision": {"decision": "keep_existing", "source_sha256": {}}},
+                },
+            }))
+            argv = ["prepare-revision-reviews", "--work-dir", str(work_dir)]
+            with patch("sys.argv", argv), patch.object(
+                prepare_revision_reviews.subprocess, "run"
+            ) as run:
+                self.assertEqual(prepare_revision_reviews.main(), 0)
+            command = run.call_args.args[0]
+            self.assertIn("--revision-baseline-date", command)
+            self.assertIn("2025-04-11", command)
+            self.assertEqual(command[-2:], ["--indication-index", "1"])
+            self.assertIn("--skip-indication-review", command)
+
+    def test_finds_persistent_event_number_in_filtered_changelog(self) -> None:
+        event = {
+            "event_number": 3,
+            "date": "2026-05-18",
+            "change_type": "replace",
+        }
+        self.assertEqual(event_by_number([event], 3), event)
+
     def test_revision_date_events_are_strictly_after_baseline(self) -> None:
         payload = {"events": [
             {"event_number": 1, "date": "2025-01-01"},
@@ -39,12 +106,12 @@ class UpdateCliTest(unittest.TestCase):
         self.assertIn("reconcile-indications", usage)
         self.assertIn("find-new-indications", usage)
         self.assertIn("find-revised-indications", usage)
+        self.assertIn("prepare-revision-reviews", usage)
         self.assertNotIn("record-revision-decision", usage)
         self.assertIn("assemble-revisions", usage)
         self.assertNotIn("check-curation-preflight", usage)
         self.assertNotIn("prepare-update-indication-review", usage)
         self.assertNotIn("prepare-label-history", usage)
-        self.assertNotIn("prepare-revision-review", usage)
         self.assertNotIn("assess-revised-indications", usage)
         self.assertNotIn("propose-revised-indications", usage)
         self.assertNotIn("  doctor", usage)
@@ -446,6 +513,11 @@ class UpdateCliTest(unittest.TestCase):
                         "indication": "Old wording",
                     },
                     "relevant_hunk_ids": ["hunk-1"],
+                    "relevant_hunks": [{
+                        "hunk_id": "hunk-1",
+                        "baseline_text": "Old wording",
+                        "latest_text": "New wording",
+                    }],
                     "reason": "Latest label changed the indication.",
                 }],
             }))
@@ -460,6 +532,11 @@ class UpdateCliTest(unittest.TestCase):
                     },
                 }],
             }))
+            (intermediate / "Example-claude_chunked_indication_fields.json").write_text("{}")
+            labels = work_dir / "labels"
+            labels.mkdir()
+            (labels / "Example.pdf").write_text("pdf")
+            (labels / "Example.md").write_text("label")
             history = prepare_label_history.LabelHistoryPaths(
                 intermediate / "history.json",
                 intermediate / "cache.json",
@@ -483,11 +560,16 @@ class UpdateCliTest(unittest.TestCase):
                 baseline_label_url="https://example.test/old.pdf",
             )
             command = prepare_reviews.call_args.args[0]
-            self.assertIn("--revision-baseline-date", command)
-            self.assertIn("2025-04-11", command)
-            self.assertEqual(command[-2:], ["--indication-index", "2"])
+            self.assertIn("--stage", command)
+            self.assertIn("revision", command)
+            self.assertIn("--revision-targets-json", command)
+            self.assertIn("--revision-assessment-json", command)
+            self.assertIn("2", command)
             targets = json.loads((intermediate / "revision-targets.json").read_text())
             self.assertEqual(targets["targets"][0]["existing_indication_id"], "ind:fda.example:0")
+            self.assertEqual(
+                targets["targets"][0]["label_changes"][0]["hunk_id"], "hunk-1"
+            )
 
     def test_commands_refuse_to_replace_artifacts_without_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

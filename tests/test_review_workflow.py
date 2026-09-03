@@ -15,6 +15,7 @@ from moalmanac_fda_curation.review.packets import (
     document_markdown,
     description_markdown,
     indication_markdown,
+    revision_markdown,
 )
 from moalmanac_fda_curation.doctor import virtual_environment_status
 from moalmanac_fda_curation.review.decisions import (
@@ -166,6 +167,25 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.assertIn("Resolved curator edit", markdown)
         self.assertIn('"raw_cancer_type": "non-small cell lung cancer"', markdown)
 
+    def test_revision_screening_decisions_use_explicit_outcomes(self) -> None:
+        decisions = empty_decisions()
+        record_decision(
+            decisions,
+            "revision",
+            "use_latest",
+            0,
+            {},
+            None,
+            {},
+        )
+        self.assertEqual(
+            decisions["indications"]["0"]["revision"]["decision"], "use_latest"
+        )
+        with self.assertRaisesRegex(ValueError, "Revision screening requires"):
+            record_decision(
+                empty_decisions(), "revision", "accepted", 0, {}, None, {}
+            )
+
     def test_candidate_markdown_is_a_short_biomarker_screen(self) -> None:
         packet = build_stage_packet("candidates", self.document, self.indications)
         markdown = candidates_markdown(packet)
@@ -242,6 +262,108 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.assertIn("Proposed date current revised form first appeared", markdown)
         self.assertIn("Previous curated label date: 2025-04-11", markdown)
         self.assertNotIn("initial approval review", markdown)
+
+    def test_revision_reviews_include_stage_specific_existing_record(self) -> None:
+        existing = {
+            "indication": "Existing indication wording.",
+            "description": "Existing description wording.",
+            "initial_approval_date": "2024-03-01",
+            "initial_approval_url": "https://example.test/existing.pdf",
+            "raw_biomarkers": "RET fusion",
+            "raw_cancer_type": "lung cancer",
+            "raw_therapeutics": "Example",
+        }
+        revision_targets = {
+            "targets": [{
+                "latest_indication_index": 0,
+                "existing_indication": existing,
+                "reason": "The population wording changed.",
+                "label_changes": [{
+                    "hunk_id": "hunk-2",
+                    "baseline_text": "Previous exact label wording.",
+                    "latest_text": "Newer exact label wording.",
+                }],
+            }]
+        }
+        revision_packet = build_stage_packet(
+            "revision",
+            self.document,
+            self.indications,
+            indication_index=0,
+            revision_targets=revision_targets,
+            artifact_paths={
+                "latest label PDF": "/tmp/latest.pdf",
+                "previous curated label PDF": "/tmp/previous.pdf",
+                "revision assessment": "/tmp/revision-assessment.json",
+            },
+        )
+        indication_packet = build_stage_packet(
+            "indication",
+            self.document,
+            self.indications,
+            indication_index=0,
+            revision_targets=revision_targets,
+        )
+        description_packet = build_stage_packet(
+            "description",
+            self.document,
+            self.indications,
+            indication_index=0,
+            descriptions=self.descriptions,
+            revision_targets=revision_targets,
+        )
+        approval_packet = build_stage_packet(
+            "approval",
+            self.document,
+            self.indications,
+            indication_index=0,
+            date_matches=self.dates,
+            revision_baseline_date="2024-03-01",
+            revision_targets=revision_targets,
+        )
+
+        indication_review = indication_markdown(indication_packet)
+        self.assertIn("Existing MOAlmanac indication", indication_review)
+        self.assertIn("Existing indication wording.", indication_review)
+        self.assertNotIn("Existing description wording.", indication_review)
+        screening_review = revision_markdown(revision_packet)
+        self.assertIn("Why this was flagged", screening_review)
+        self.assertIn("The population wording changed.", screening_review)
+        self.assertIn("Previous exact label wording.", screening_review)
+        self.assertIn("Newer exact label wording.", screening_review)
+        self.assertIn("`raw_biomarkers`: RET-positive", screening_review)
+        self.assertIn("`raw_cancer_type`: NSCLC", screening_review)
+        self.assertIn("`raw_therapeutics`: Example (examplemab)", screening_review)
+        self.assertIn("`raw_biomarkers`: RET fusion", screening_review)
+        self.assertIn("`raw_cancer_type`: lung cancer", screening_review)
+        self.assertIn("`raw_therapeutics`: Example", screening_review)
+        self.assertNotIn("Why this was flagged", indication_review)
+        self.assertLess(
+            screening_review.index("Why this was flagged"),
+            screening_review.index("Latest-label indication"),
+        )
+        self.assertLess(
+            screening_review.index("Latest-label indication"),
+            screening_review.index("Existing MOAlmanac indication"),
+        )
+        self.assertLess(
+            screening_review.index("Existing MOAlmanac indication"),
+            screening_review.index("Label change 1"),
+        )
+        self.assertIn("[latest label PDF](</tmp/latest.pdf>)", screening_review)
+        self.assertIn("[previous curated label PDF](</tmp/previous.pdf>)", screening_review)
+        self.assertIn(
+            "[revision assessment](</tmp/revision-assessment.json>)", screening_review
+        )
+
+        description_review = description_markdown(description_packet)
+        self.assertIn("Existing MOAlmanac description", description_review)
+        self.assertIn("Existing description wording.", description_review)
+
+        approval_review = approval_markdown(approval_packet)
+        self.assertIn("Existing MOAlmanac approval evidence", approval_review)
+        self.assertIn("2024-03-01", approval_review)
+        self.assertIn("https://example.test/existing.pdf", approval_review)
 
     def test_virtual_environment_status(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -12,8 +12,8 @@ from typing import Any
 
 from ..core.artifacts import file_sha256, load_json_object, write_json_atomic
 
-VALID_STAGES = {"document", "indication", "description", "approval"}
-VALID_DECISIONS = {"accepted", "edited", "excluded", "unresolved"}
+VALID_STAGES = {"document", "revision", "indication", "description", "approval"}
+VALID_DECISIONS = {"accepted", "edited", "excluded", "unresolved", "use_latest", "keep_existing"}
 ALLOWED_OVERRIDES = {
     "document": {"company", "name", "description", "aliases", "status"},
     "indication": {
@@ -24,6 +24,12 @@ ALLOWED_OVERRIDES = {
     },
     "description": {"description"},
     "approval": {"initial_approval_date", "initial_approval_url"},
+    "revision": {
+        "indication",
+        "raw_biomarkers",
+        "raw_cancer_type",
+        "raw_therapeutics",
+    },
 }
 
 
@@ -75,6 +81,10 @@ def record_decision(
         raise ValueError(f"Unknown stage: {stage}")
     if decision not in VALID_DECISIONS:
         raise ValueError(f"Unknown decision: {decision}")
+    if stage == "revision" and decision not in {"use_latest", "keep_existing", "unresolved"}:
+        raise ValueError("Revision screening requires use_latest, keep_existing, or unresolved")
+    if stage != "revision" and decision in {"use_latest", "keep_existing"}:
+        raise ValueError(f"Decision {decision} is only valid for revision screening")
     if stage == "document" and indication_index is not None:
         raise ValueError("Document decisions must not include an indication index")
     if stage != "document" and indication_index is None:
@@ -83,8 +93,8 @@ def record_decision(
         raise ValueError("Only an indication can be excluded")
     if decision == "edited" and not overrides:
         raise ValueError("An edited decision requires at least one override")
-    if decision != "edited" and overrides:
-        raise ValueError("Overrides are only valid for an edited decision")
+    if decision not in {"edited", "use_latest"} and overrides:
+        raise ValueError("Overrides require an edited or use_latest decision")
     unexpected_overrides = set(overrides) - ALLOWED_OVERRIDES[stage]
     if unexpected_overrides:
         raise ValueError(
@@ -209,6 +219,20 @@ def review_inputs(
         str(label_markdown),
     ]
     baseline_date = revision_context(work_dir, indication_index)
+    if baseline_date:
+        revision_targets = work_dir / "intermediate" / "revision-targets.json"
+        sources.append(revision_targets)
+        command.extend(("--revision-targets-json", str(revision_targets)))
+    if stage == "revision":
+        revision_assessment = work_dir / "intermediate" / "revision-assessment.json"
+        sources.append(revision_assessment)
+        command.extend(("--revision-assessment-json", str(revision_assessment)))
+        baseline_pdfs = sorted(
+            (work_dir / "historical-labels").rglob(f"*{baseline_date}*.pdf")
+        )
+        if baseline_pdfs:
+            command.extend(("--baseline-label-pdf", str(baseline_pdfs[0])))
+        return sources, command
     if stage == "description":
         descriptions = work_dir / "intermediate" / (
             "selected-revision-description-proposals.json"

@@ -12,7 +12,7 @@ from typing import Any
 from .decisions import load_decisions
 from ..core.artifacts import load_document_artifact, load_json_object, write_json_atomic
 
-STAGES = ("document", "candidates", "indication", "description", "approval")
+STAGES = ("document", "candidates", "revision", "indication", "description", "approval")
 
 
 def load_json_list(path: Path, name: str) -> list[dict[str, Any]]:
@@ -24,6 +24,22 @@ def load_json_list(path: Path, name: str) -> list[dict[str, Any]]:
 
 def item_by_index(items: list[dict[str, Any]], index: int) -> dict[str, Any] | None:
     return next((item for item in items if item.get("indication_index") == index), None)
+
+
+def revision_target_by_index(
+    payload: dict[str, Any] | None, index: int
+) -> dict[str, Any] | None:
+    """Return revision metadata for one latest-label indication index."""
+    if not payload:
+        return None
+    return next(
+        (
+            item
+            for item in payload.get("targets") or []
+            if item.get("latest_indication_index") == index
+        ),
+        None,
+    )
 
 
 def display_name(indication: dict[str, Any], index: int) -> str:
@@ -98,6 +114,7 @@ def build_stage_packet(
     decisions: dict[str, Any] | None = None,
     artifact_paths: dict[str, str] | None = None,
     revision_baseline_date: str | None = None,
+    revision_targets: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     decisions = decisions or {"document": {}, "indications": {}}
     base = {
@@ -152,17 +169,37 @@ def build_stage_packet(
         raise ValueError(f"Stage {stage} requires a valid --indication-index")
     indication = indications[indication_index]
     stage_decisions = decisions.get("indications", {}).get(str(indication_index), {})
-    reviewed_indication = apply_decision_overrides(
-        indication, stage_decisions.get("indication")
-    )
+    indication_decision = stage_decisions.get("indication")
+    revision_decision = stage_decisions.get("revision") or {}
+    if not indication_decision and revision_decision.get("decision") == "use_latest":
+        indication_decision = {
+            "decision": "edited" if revision_decision.get("overrides") else "accepted",
+            "overrides": revision_decision.get("overrides") or {},
+        }
+    reviewed_indication = apply_decision_overrides(indication, indication_decision)
+    revision_target = revision_target_by_index(revision_targets, indication_index)
     common = {
         **base,
         "indication_index": indication_index,
         "display_name": display_name(reviewed_indication, indication_index),
         "pipeline_indication_proposal": indication,
         "current_reviewed_indication": reviewed_indication,
-        "indication_decision": stage_decisions.get("indication") or None,
+        "indication_decision": indication_decision or None,
+        "existing_indication": (
+            revision_target.get("existing_indication") if revision_target else None
+        ),
+        "revision_reason": revision_target.get("reason") if revision_target else None,
+        "label_changes": revision_target.get("label_changes") if revision_target else [],
     }
+
+    if stage == "revision":
+        if not revision_target:
+            raise ValueError(f"No revision target exists for indication {indication_index}")
+        return {
+            **common,
+            "revision_target": revision_target,
+            "decision": stage_decisions.get("revision"),
+        }
 
     if stage == "indication":
         source_chunks = indication_payload.get("source_chunks") or []
@@ -322,24 +359,46 @@ def candidates_markdown(packet: dict[str, Any]) -> str:
 
 def indication_markdown(packet: dict[str, Any]) -> str:
     proposal = packet["pipeline_indication_proposal"]
+    existing = packet.get("existing_indication") or {}
     highlights = packet["fda_highlights_source"]
     lines = [
         f"# {packet['display_name']} — indication review",
-        "",
-        "## Proposal to review — model generated",
-        "",
-        *blockquote(proposal.get("indication")),
-        "",
-        f"- Biomarker: {proposal.get('raw_biomarkers') or 'null'}",
-        f"- Cancer type: {proposal.get('raw_cancer_type') or 'null'}",
-        f"- Therapeutics: {proposal.get('raw_therapeutics') or 'null'}",
-        "",
-        "## Supporting evidence",
-        "",
-        "### FDA source — verbatim Indications and Usage",
-        "",
-        *blockquote(packet.get("fda_indications_and_usage_excerpt")),
     ]
+    lines.extend(
+        [
+            "",
+            "## Proposal to review — model generated",
+            "",
+            *blockquote(proposal.get("indication")),
+            "",
+            f"- Biomarker: {proposal.get('raw_biomarkers') or 'null'}",
+            f"- Cancer type: {proposal.get('raw_cancer_type') or 'null'}",
+            f"- Therapeutics: {proposal.get('raw_therapeutics') or 'null'}",
+        ]
+    )
+    if existing:
+        lines.extend(
+            [
+                "",
+                "## Existing MOAlmanac indication",
+                "",
+                *blockquote(existing.get("indication")),
+                "",
+                f"- Biomarker: {existing.get('raw_biomarkers') or 'null'}",
+                f"- Cancer type: {existing.get('raw_cancer_type') or 'null'}",
+                f"- Therapeutics: {existing.get('raw_therapeutics') or 'null'}",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Supporting evidence",
+            "",
+            "### FDA source — verbatim Indications and Usage",
+            "",
+            *blockquote(packet.get("fda_indications_and_usage_excerpt")),
+        ]
+    )
     if highlights.get("used_by_pipeline") and highlights.get("drug_class_phrase"):
         lines.extend(
             [
@@ -359,8 +418,55 @@ def indication_markdown(packet: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def revision_markdown(packet: dict[str, Any]) -> str:
+    target = packet["revision_target"]
+    existing = target["existing_indication"]
+    latest = packet["pipeline_indication_proposal"]
+    lines = [
+        f"# {packet['display_name']} — possible revision",
+        "",
+        "## Why this was flagged",
+        "",
+        f"- Model assessment: {target.get('reason') or 'Not available'}",
+        "",
+        "## Latest-label indication extracted by the pipeline",
+        "",
+        *blockquote(latest.get("indication")),
+        "",
+        f"- `raw_biomarkers`: {latest.get('raw_biomarkers') or 'null'}",
+        f"- `raw_cancer_type`: {latest.get('raw_cancer_type') or 'null'}",
+        f"- `raw_therapeutics`: {latest.get('raw_therapeutics') or 'null'}",
+        "",
+        "## Existing MOAlmanac indication",
+        "",
+        *blockquote(existing.get("indication")),
+        "",
+        f"- `raw_biomarkers`: {existing.get('raw_biomarkers') or 'null'}",
+        f"- `raw_cancer_type`: {existing.get('raw_cancer_type') or 'null'}",
+        f"- `raw_therapeutics`: {existing.get('raw_therapeutics') or 'null'}",
+    ]
+    for number, change in enumerate(target.get("label_changes") or [], start=1):
+        lines.extend(
+            [
+                "",
+                f"### Label change {number} — deterministically retrieved",
+                "",
+                "**Previous label**",
+                "",
+                *blockquote(change.get("baseline_text")),
+                "",
+                "**Newer label**",
+                "",
+                *blockquote(change.get("latest_text")),
+            ]
+        )
+    lines.extend([*decision_json(packet), *artifact_links(packet)])
+    return "\n".join(lines) + "\n"
+
+
 def description_markdown(packet: dict[str, Any]) -> str:
     proposal = packet["pipeline_description_proposal"]
+    existing = packet.get("existing_indication") or {}
     selections = proposal.get("supporting_label_section_selections") or []
     selected_span = selections[0].get("selected_span") if selections else None
     indication_overrides = (packet.get("indication_decision") or {}).get("overrides") or {}
@@ -375,28 +481,41 @@ def description_markdown(packet: dict[str, Any]) -> str:
         "## Proposal to review — model generated",
         "",
         *blockquote(proposal.get("description")),
-        "",
-        "## Supporting context",
-        "",
-        "### Indication context",
-        "",
-        f"**{indication_label}**",
-        "",
-        *blockquote(packet["current_reviewed_indication"].get("indication")),
-        "",
-        "## Supporting evidence",
-        "",
-        "### FDA Clinical Studies source — verbatim, span selected by pipeline model",
-        "",
-        *blockquote(selected_span.get("text") if selected_span else None),
-        "",
-        f"- Pipeline says Clinical Studies detail was added: {proposal.get('clinical_detail_used', False)}",
-        f"- Added detail: {proposal.get('clinical_detail_text') or 'None'}",
-        f"- Claimed purpose: {proposal.get('clinical_detail_purpose') or 'None'}",
-        *resolved_edit_json(packet, packet["current_reviewed_description"]),
-        *decision_json(packet),
-        *artifact_links(packet),
     ]
+    if existing:
+        lines.extend(
+            [
+                "",
+                "## Existing MOAlmanac description",
+                "",
+                *blockquote(existing.get("description")),
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Supporting context",
+            "",
+            "### Indication context",
+            "",
+            f"**{indication_label}**",
+            "",
+            *blockquote(packet["current_reviewed_indication"].get("indication")),
+            "",
+            "## Supporting evidence",
+            "",
+            "### FDA Clinical Studies source — verbatim, span selected by pipeline model",
+            "",
+            *blockquote(selected_span.get("text") if selected_span else None),
+            "",
+            f"- Pipeline says Clinical Studies detail was added: {proposal.get('clinical_detail_used', False)}",
+            f"- Added detail: {proposal.get('clinical_detail_text') or 'None'}",
+            f"- Claimed purpose: {proposal.get('clinical_detail_purpose') or 'None'}",
+            *resolved_edit_json(packet, packet["current_reviewed_description"]),
+            *decision_json(packet),
+            *artifact_links(packet),
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -414,6 +533,7 @@ def approval_markdown(packet: dict[str, Any]) -> str:
         else "Pipeline indication proposal"
     )
     revision_baseline_date = packet.get("revision_baseline_date")
+    existing = packet.get("existing_indication") or {}
     review_title = (
         "current-form date review"
         if revision_baseline_date
@@ -444,36 +564,51 @@ def approval_markdown(packet: dict[str, Any]) -> str:
         f"- Model rationale: {match.get('why_this_event_is_full_match') or 'Not available'}",
         f"- Why earlier events were judged incomplete: {match.get('why_earlier_events_are_incomplete') or 'Not available'}",
         f"- Missing or uncertain details: {json.dumps(match.get('missing_or_uncertain_details') or [])}",
-        "",
-        "## Supporting context",
-        "",
-        "### Indication context",
-        "",
-        f"**{indication_label}**",
-        "",
-        *blockquote(packet["current_reviewed_indication"].get("indication")),
-        "",
-        "## Supporting evidence — deterministically retrieved event",
-        "",
-        f"- Structural verification: {'passed' if verification.get('verified') else 'not verified'}",
-        "",
-        "### Before — verbatim changelog text",
-        "",
-        *blockquote(match.get("matched_before_quote")),
-        "",
-        "### After — verbatim changelog text",
-        "",
-        *blockquote(match.get("matched_after_quote")),
-        *resolved_edit_json(packet, packet["current_reviewed_approval"]),
-        *decision_json(packet),
-        *artifact_links(packet),
     ]
+    if existing:
+        lines.extend(
+            [
+                "",
+                "## Existing MOAlmanac approval evidence",
+                "",
+                f"- Initial approval date: {existing.get('initial_approval_date') or 'null'}",
+                f"- Initial approval URL: {existing.get('initial_approval_url') or 'null'}",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Supporting context",
+            "",
+            "### Indication context",
+            "",
+            f"**{indication_label}**",
+            "",
+            *blockquote(packet["current_reviewed_indication"].get("indication")),
+            "",
+            "## Supporting evidence — deterministically retrieved event",
+            "",
+            f"- Structural verification: {'passed' if verification.get('verified') else 'not verified'}",
+            "",
+            "### Before — verbatim changelog text",
+            "",
+            *blockquote(match.get("matched_before_quote")),
+            "",
+            "### After — verbatim changelog text",
+            "",
+            *blockquote(match.get("matched_after_quote")),
+            *resolved_edit_json(packet, packet["current_reviewed_approval"]),
+            *decision_json(packet),
+            *artifact_links(packet),
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
 MARKDOWN_BUILDERS = {
     "document": document_markdown,
     "candidates": candidates_markdown,
+    "revision": revision_markdown,
     "indication": indication_markdown,
     "description": description_markdown,
     "approval": approval_markdown,
@@ -485,6 +620,9 @@ def output_paths(output_dir: Path, stage: str, packet: dict[str, Any]) -> tuple[
         stem_dir, stem = output_dir, "document"
     elif stage == "candidates":
         stem_dir, stem = output_dir, "indication-candidates"
+    elif stage == "revision":
+        stem_dir = output_dir / "revision-screening"
+        stem = slugify(packet["display_name"])
     else:
         stem_dir = output_dir / "indications" / slugify(packet["display_name"])
         stem = stage
@@ -504,6 +642,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--label-markdown", type=Path)
     parser.add_argument("--changelog-markdown", type=Path)
     parser.add_argument("--revision-baseline-date")
+    parser.add_argument("--revision-targets-json", type=Path)
+    parser.add_argument("--revision-assessment-json", type=Path)
+    parser.add_argument("--baseline-label-pdf", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     return parser.parse_args()
 
@@ -518,7 +659,13 @@ def main() -> int:
         raise ValueError("approval review requires --changelog-markdown")
     required_local_sources = [
         path
-        for path in (args.label_pdf, args.label_markdown, args.changelog_markdown)
+        for path in (
+            args.label_pdf,
+            args.label_markdown,
+            args.changelog_markdown,
+            args.baseline_label_pdf,
+            args.revision_assessment_json,
+        )
         if path is not None
     ]
     missing_local_sources = [str(path) for path in required_local_sources if not path.is_file()]
@@ -538,9 +685,20 @@ def main() -> int:
         ("approval evidence", dates_path),
         ("label PDF", args.label_pdf.resolve() if args.label_pdf else None),
         ("label Markdown", args.label_markdown.resolve() if args.label_markdown else None),
+        ("previous curated label PDF", args.baseline_label_pdf.resolve() if args.baseline_label_pdf else None),
     ):
         if path:
             artifacts[name] = str(path)
+    if args.stage == "revision":
+        artifacts = {
+            name: str(path.resolve())
+            for name, path in (
+                ("latest label PDF", args.label_pdf),
+                ("previous curated label PDF", args.baseline_label_pdf),
+                ("revision assessment", args.revision_assessment_json),
+            )
+            if path
+        }
     if args.stage == "approval" and args.changelog_markdown:
         approval_items = load_json_list(dates_path, "Date matches") if dates_path else []
         approval_item = item_by_index(approval_items, args.indication_index)
@@ -568,6 +726,11 @@ def main() -> int:
         decisions=decisions,
         artifact_paths=artifacts,
         revision_baseline_date=args.revision_baseline_date,
+        revision_targets=(
+            load_json_object(args.revision_targets_json.resolve(), "Revision targets")
+            if args.revision_targets_json
+            else None
+        ),
     )
     json_path, markdown_path = output_paths(args.output_dir.resolve(), args.stage, packet)
     write_json_atomic(json_path, packet)

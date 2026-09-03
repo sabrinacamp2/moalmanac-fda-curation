@@ -27,6 +27,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Regenerate existing extraction outputs; requires explicit curator approval.",
     )
+    parser.add_argument(
+        "--skip-indication-review",
+        action="store_true",
+        help="Prepare only description and approval reviews for pre-approved indications.",
+    )
     return parser.parse_args()
 
 
@@ -76,6 +81,7 @@ def main() -> int:
         / f"{changelog_stem}-section1-changelog.md"
     )
     decisions = work_dir / "review" / "decisions.json"
+    revision_targets = intermediate / "revision-targets.json"
     review_dir = work_dir / "review"
 
     indexes = list(dict.fromkeys(args.indication_index))
@@ -133,7 +139,10 @@ def main() -> int:
     run(approval_command)
 
     for index in indexes:
-        for stage in ("indication", "description", "approval"):
+        stages = ("description", "approval") if args.skip_indication_review else (
+            "indication", "description", "approval"
+        )
+        for stage in stages:
             command = [
                 sys.executable,
                 "-m",
@@ -160,6 +169,8 @@ def main() -> int:
                     )
             if decisions.exists():
                 command.extend(("--decisions-json", str(decisions)))
+            if args.revision_baseline_date:
+                command.extend(("--revision-targets-json", str(revision_targets)))
             command.extend(("--label-pdf", str(label_pdf)))
             command.extend(("--label-markdown", str(label_markdown)))
             run(command)

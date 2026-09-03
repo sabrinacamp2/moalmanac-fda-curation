@@ -57,7 +57,7 @@ class RevisionAssemblyTest(unittest.TestCase):
             "schema_version": 1,
             "document": {},
             "indications": {"1": {
-                "indication": {"decision": "accepted", "overrides": {}},
+                "revision": {"decision": "use_latest", "overrides": {}},
                 "description": {"decision": "accepted", "overrides": {}},
                 "approval": {"decision": "accepted", "overrides": {}},
             }},
@@ -89,6 +89,21 @@ class RevisionAssemblyTest(unittest.TestCase):
         self.assertIn("Existing versus newly curated indication", markdown)
         self.assertIn("Replaced `Old` with `New`", markdown)
         self.assertIn("Current-form date review", markdown)
+        self.assertIn("Revision screening", markdown)
+        self.assertNotIn("Indication review", markdown)
+
+    def test_revision_screening_overrides_update_latest_proposal(self) -> None:
+        self.decisions["indications"]["1"]["revision"]["overrides"] = {
+            "raw_cancer_type": "edited breast cancer"
+        }
+        result = assemble_updated_indications(
+            self.targets,
+            self.indications,
+            self.descriptions,
+            self.dates,
+            self.decisions,
+        )
+        self.assertEqual(result[0]["raw_cancer_type"], "edited breast cancer")
 
     def test_incomplete_stage_decision_blocks_assembly(self) -> None:
         del self.decisions["indications"]["1"]["approval"]
@@ -100,6 +115,22 @@ class RevisionAssemblyTest(unittest.TestCase):
                 self.dates,
                 self.decisions,
             )
+
+    def test_keep_existing_decision_is_omitted(self) -> None:
+        self.decisions["indications"]["1"]["revision"] = {
+            "decision": "keep_existing",
+            "overrides": {},
+        }
+        self.assertEqual(
+            assemble_updated_indications(
+                self.targets,
+                self.indications,
+                self.descriptions,
+                self.dates,
+                self.decisions,
+            ),
+            [],
+        )
 
 
 if __name__ == "__main__":

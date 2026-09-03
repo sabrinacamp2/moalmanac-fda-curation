@@ -75,7 +75,11 @@ def assemble_updated_indications(
     for target in targets_payload.get("targets") or []:
         index = target["latest_indication_index"]
         stages = decisions.get("indications", {}).get(str(index), {})
-        indication_decision = accepted_entry(stages.get("indication"), f"indication {index}")
+        screening_decision = (stages.get("revision") or {}).get("decision")
+        if screening_decision == "keep_existing":
+            continue
+        if screening_decision != "use_latest":
+            raise ValueError(f"Revision screening for indication {index} is unresolved")
         description_decision = accepted_entry(
             stages.get("description"), f"indication {index} description"
         )
@@ -86,7 +90,7 @@ def assemble_updated_indications(
             raise ValueError(f"Revision target {index} is missing prepared curation evidence")
 
         indication = copy.deepcopy(indications[index])
-        indication.update(indication_decision.get("overrides") or {})
+        indication.update((stages.get("revision") or {}).get("overrides") or {})
         description = copy.deepcopy(descriptions[index])
         description.update(description_decision.get("overrides") or {})
         date_match = copy.deepcopy(dates[index])
@@ -137,12 +141,13 @@ def comparison_markdown(
             ["**Existing**", "", *quote(old), "", "**Newly curated**", "", *quote(new)]
         )
     indication_dir = review_dir / "indications" / slugify(target["review_label"])
+    screening = review_dir / "revision-screening" / f"{slugify(target['review_label'])}.md"
     lines.extend(
         [
             "",
             "## Review files",
             "",
-            f"- [Indication review](<{indication_dir / 'indication.md'}>)",
+            f"- [Revision screening](<{screening}>)",
             f"- [Description review](<{indication_dir / 'description.md'}>)",
             f"- [Current-form date review](<{indication_dir / 'approval.md'}>)",
             "",
@@ -196,6 +201,8 @@ def main() -> int:
     by_id = {item["id"]: item for item in revised}
     for target in targets.get("targets") or []:
         indication_id = target["existing_indication_id"]
+        if indication_id not in by_id:
+            continue
         path = comparisons_dir / f"{slugify(indication_id)}.md"
         markdown = comparison_markdown(target, by_id[indication_id], work_dir / "review")
         path.parent.mkdir(parents=True, exist_ok=True)

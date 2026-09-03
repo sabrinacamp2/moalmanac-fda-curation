@@ -1,4 +1,4 @@
-"""Find changed matched indications and prepare them for current-form review."""
+"""Find changed matched indications and prepare revision screening reviews."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from ..core.artifacts import load_json_object, write_json_atomic
-from ..core.extract_indication_descriptions import DEFAULT_MODEL as CURATION_MODEL
 from ..core.identify_new_indications import load_existing_indications
 from ..core.identify_revised_indications import DEFAULT_MODEL as ASSESSMENT_MODEL
 from ..core.identify_revised_indications import (
@@ -26,9 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--context-blocks", type=int, default=1)
     parser.add_argument("--assessment-model", default=ASSESSMENT_MODEL)
-    parser.add_argument("--curation-model", default=CURATION_MODEL)
     parser.add_argument("--assessment-max-tokens", type=int, default=8000)
-    parser.add_argument("--curation-max-tokens", type=int, default=4096)
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -63,6 +60,7 @@ def revision_targets(
                     or f"Indication {mapping['latest_indication_index']}"
                 ),
                 "label_change_ids": item.get("relevant_hunk_ids") or [],
+                "label_changes": item.get("relevant_hunks") or [],
                 "reason": item.get("reason"),
             }
         )
@@ -142,27 +140,42 @@ def main() -> int:
         print("No changed matched indications were found.")
         return 0
 
-    command = [
-        sys.executable,
-        "-m",
-        "moalmanac_fda_curation.workflows.prepare_selected",
-        "--work-dir",
-        str(work_dir),
-        "--model",
-        args.curation_model,
-        "--max-tokens",
-        str(args.curation_max_tokens),
-        "--revision-baseline-date",
-        status["curated_label_date"],
-    ]
+    indication_fields = next(intermediate.glob("*-claude_chunked_indication_fields.json"))
+    label_pdf = next((work_dir / "labels").glob("*.pdf"))
+    label_markdown = next((work_dir / "labels").glob("*.md"))
+    baseline_pdfs = sorted(
+        (work_dir / "historical-labels").rglob(f"*{status['curated_label_date']}*.pdf")
+    )
     for target in targets:
-        command.extend(("--indication-index", str(target["latest_indication_index"])))
-    if args.overwrite:
-        command.append("--overwrite")
-    subprocess.run(command, check=True)
+        command = [
+            sys.executable,
+            "-m",
+            "moalmanac_fda_curation.review.packets",
+            "--stage",
+            "revision",
+            "--document-json",
+            str(intermediate / "document.proposal.json"),
+            "--indication-fields-json",
+            str(indication_fields),
+            "--indication-index",
+            str(target["latest_indication_index"]),
+            "--revision-targets-json",
+            str(targets_path),
+            "--revision-assessment-json",
+            str(assessment_path),
+            "--label-pdf",
+            str(label_pdf),
+            "--label-markdown",
+            str(label_markdown),
+            "--output-dir",
+            str(work_dir / "review"),
+        ]
+        if baseline_pdfs:
+            command.extend(("--baseline-label-pdf", str(baseline_pdfs[0])))
+        subprocess.run(command, check=True)
     print(f"Changed indication targets: {targets_path}")
     print(
-        "Changed indication indexes prepared for review: "
+        "Potentially revised indication indexes ready for screening: "
         + ", ".join(str(target["latest_indication_index"]) for target in targets)
     )
     return 0
