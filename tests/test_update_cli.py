@@ -10,7 +10,12 @@ from unittest.mock import patch
 
 from moalmanac_fda_curation import cli
 from moalmanac_fda_curation.core.match_indication_approval_dates_from_changelog import (
+    build_changelog_match_prompt,
+    build_revision_changelog_match_prompt,
     event_by_number,
+)
+from moalmanac_fda_curation.core.match_indication_approval_dates_batch import (
+    build_batch_changelog_match_prompt,
 )
 from moalmanac_fda_curation.workflows import (
     check_preflight,
@@ -24,6 +29,39 @@ from moalmanac_fda_curation.workflows import (
 
 
 class UpdateCliTest(unittest.TestCase):
+    def test_date_prompts_explain_cumulative_change_spans(self) -> None:
+        indication = {
+            "indication": "Example indication",
+            "raw_biomarkers": "HER2-positive",
+        }
+        prompts = (
+            build_changelog_match_prompt(indication, "changelog"),
+            build_batch_changelog_match_prompt([indication], "changelog"),
+        )
+        for prompt in prompts:
+            self.assertIn("cumulative label history", prompt)
+            self.assertIn("only the passage changed", prompt)
+            self.assertIn("not evidence that it was absent", prompt)
+            self.assertIn("qualifier needed for the current target indication", prompt)
+
+    def test_revision_date_prompt_matches_identified_change_not_full_indication(self) -> None:
+        prompt = build_revision_changelog_match_prompt(
+            [{
+                "latest_indication": {"indication": "Latest indication"},
+                "reason": "Adult population was added.",
+                "label_changes": [{
+                    "baseline_text": "patients",
+                    "latest_text": "adult patients",
+                }],
+            }],
+            "event history",
+        )
+        self.assertIn("already-identified FDA indication revisions", prompt)
+        self.assertIn("do not independently reassess", prompt)
+        self.assertIn("adult patients", prompt)
+        self.assertIn("earliest changelog event", prompt)
+        self.assertIn("event pointer", prompt)
+
     def test_only_curator_selected_revisions_are_prepared(self) -> None:
         targets = {
             "targets": [

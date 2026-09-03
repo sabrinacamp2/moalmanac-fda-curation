@@ -364,6 +364,8 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.assertIn("Existing MOAlmanac approval evidence", approval_review)
         self.assertIn("2024-03-01", approval_review)
         self.assertIn("https://example.test/existing.pdf", approval_review)
+        self.assertIn("meaningful enough to replace", approval_review)
+        self.assertIn("Keeping the existing approval provenance is valid", approval_review)
 
     def test_virtual_environment_status(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

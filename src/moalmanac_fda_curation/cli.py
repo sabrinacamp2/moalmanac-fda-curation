@@ -63,7 +63,7 @@ COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
         decisions.main,
     ),
     "assemble-revisions": (
-        "Assemble updated indications and compare them with existing records",
+        "Assemble curator-approved updates to existing indications",
         revision_assembly.main,
     ),
     "assemble-reviewed": (

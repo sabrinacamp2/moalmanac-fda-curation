@@ -61,6 +61,6 @@ Route from the command output:
 - Do not present unchanged indications unless the curator asks.
 
 After description and current-form date are resolved for every selected update, run
-`assemble-revisions`. Present its comparison Markdown files one at a time and ask whether
-the newly curated record omitted anything important or introduced anything unsupported. If
-a correction is needed, edit the relevant stage decision and reassemble.
+`assemble-revisions` and report the path to `reviewed/revised-indications.json`. The
+curator already compared old and new values in the preceding reviews, so this finalization
+does not require another decision.

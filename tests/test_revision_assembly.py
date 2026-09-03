@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
-
 from moalmanac_fda_curation.review.revision_assembly import (
     assemble_updated_indications,
-    comparison_markdown,
 )
 
 
@@ -74,23 +71,6 @@ class RevisionAssemblyTest(unittest.TestCase):
         self.assertEqual(result[0]["id"], "ind:fda.example:7")
         self.assertEqual(result[0]["indication"], "New indication wording.")
         self.assertEqual(result[0]["initial_approval_date"], "2026-01-02")
-
-    def test_comparison_highlights_removed_and_added_text(self) -> None:
-        proposed = assemble_updated_indications(
-            self.targets,
-            self.indications,
-            self.descriptions,
-            self.dates,
-            self.decisions,
-        )[0]
-        markdown = comparison_markdown(
-            self.targets["targets"][0], proposed, Path("/tmp/review")
-        )
-        self.assertIn("Existing versus newly curated indication", markdown)
-        self.assertIn("Replaced `Old` with `New`", markdown)
-        self.assertIn("Current-form date review", markdown)
-        self.assertIn("Revision screening", markdown)
-        self.assertNotIn("Indication review", markdown)
 
     def test_revision_screening_overrides_update_latest_proposal(self) -> None:
         self.decisions["indications"]["1"]["revision"]["overrides"] = {

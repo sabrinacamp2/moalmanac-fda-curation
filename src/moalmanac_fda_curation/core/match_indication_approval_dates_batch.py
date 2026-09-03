@@ -114,13 +114,19 @@ def build_batch_changelog_match_prompt(
     return f"""
 You are matching current FDA indications to a Section 1 changelog.
 
-For every indexed target indication, identify the earliest changelog event
-whose After text fully supports the indication.
+For every indexed target indication, identify the earliest changelog event at
+which the cumulative label history supports the indication in its current form.
 
 Strict matching rules:
 - Use only the target indications, structured fields, and changelog below.
-- A match requires the event After text to contain or unambiguously preserve
-  every clinically meaningful qualifier in the target indication.
+- The initial event's After text is the complete baseline Indications and Usage
+  text. Each later event's Before and After text contains only the passage changed
+  by that event, not the complete section at that date.
+- Interpret later events cumulatively from the initial baseline. When a target is
+  absent from a later event, that means the event did not change its passage; its
+  absence from that change span is not evidence that it was absent from the label.
+- Choose the event that introduces or changes the last clinically meaningful
+  qualifier needed for the current target indication.
 - Clinically meaningful qualifiers include adult/pediatric population, age
   group, disease stage, resectability, line of therapy, biomarker status,
   companion diagnostic language, therapeutic regimen, combination partners,
@@ -131,8 +137,8 @@ Strict matching rules:
 - If the target says "adult patients" and an earlier event says only
   "patients", do not choose the earlier event unless that event establishes
   the adult population.
-- For replace events, compare Before and After. Choose the event only if the
-  After text is the first full match.
+- For replace events, compare Before and After to determine what that event adds,
+  removes, or changes in the cumulative indication.
 - Treat an initial event as the baseline Section 1 text from the application's
   first usable approved label.
 - Prefer exact wording matches, but allow formatting differences or

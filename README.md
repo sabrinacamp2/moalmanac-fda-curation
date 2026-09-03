@@ -59,7 +59,7 @@ record and use its NDA or BLA number, for example `NDA208558` or `BLA761174`.
 
 First-time curation writes `reviewed/document.json` and `reviewed/indication.json`.
 Revision curation reuses the same field-level reviews, preserves existing indication
-IDs, and writes `reviewed/revised-indications.json` with deterministic comparisons.
+IDs, and writes `reviewed/revised-indications.json`.
 
 For an application that MOAlmanac already curated and that has a newer approved label,
 the update workflow combines latest-label preparation, indication extraction, and
@@ -82,8 +82,7 @@ indications and creates a short screening review for each one. Record whether to
 the latest-label proposal, keep the existing record, or leave the choice unresolved.
 Then `prepare-revision-reviews` prepares description and current-form date reviews only
 for indications moving to the latest-label proposal. `assemble-revisions`
-preserves existing indication IDs and creates compact deterministic old-versus-new
-comparisons alongside the revised records.
+preserves existing indication IDs and writes the approved revised records.
 
 ## Manual setup and troubleshooting
 

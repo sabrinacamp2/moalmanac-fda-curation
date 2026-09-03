@@ -97,9 +97,11 @@ MOAlmanac record without restating the evidence.>
 ```markdown
 [Open the description review](<absolute-path-to-review/indications/<slug>/description.md>)
 
-**Harness assessment:** <Comment only on detail added from Clinical Studies or Clinical
-Pharmacology: whether it genuinely clarifies the indication and whether the cited source
-supports it. Do not assess other editorial wording differences.>
+**Harness assessment:** <First state whether detail added from Clinical Studies or
+Clinical Pharmacology reduces ambiguity in the indication's patient population,
+biomarker, therapy, disease setting, or treatment context. Then state whether the cited
+source supports that detail. Recommend indication-only wording when the added information
+is accurate but does not make the indication meaningfully clearer.>
 
 1. Accept
 2. Edit
@@ -128,24 +130,21 @@ before/after evidence is copied directly from the selected changelog event, and 
 to that numbered event in the full local changelog.
 
 For a revised indication, the same file is titled as a current-form date review. Assess
-whether the selected event is the earliest post-baseline label that supports the revised
-form; the file displays the previous curated label date for that comparison.
+two questions separately: whether the selected event is the earliest post-baseline label
+that supports the revised wording, and whether the wording change is meaningful enough
+to replace the existing MOAlmanac date and URL. The curator may keep the existing date
+and URL when the newer wording does not warrant changing the record's approval
+provenance. Present these options:
 
-## Final revision comparison in chat
+1. Use the proposed current-form date and URL
+2. Keep the existing MOAlmanac date and URL
+3. Inspect earlier events
+4. Choose another event
+5. Leave unresolved
+6. Ask a question
 
-After revision screening, description review, and current-form date review are complete,
-present the deterministic
-comparison for one newly curated indication at a time.
-
-```markdown
-[Open the existing-versus-newly-curated comparison](<absolute-path-to-review/revision-comparisons/<indication-id>.md>)
-
-**Harness assessment:** <Call attention only to a potentially important omission or an
-unsupported addition.>
-
-Tell me whether anything important was missed or removed. If so, we can return to the
-affected review stage and edit it.
-```
+When the curator keeps the existing values, record an `edited` approval decision with
+the existing `initial_approval_date` and `initial_approval_url` as explicit overrides.
 
 ## Indication mapping review in chat
 

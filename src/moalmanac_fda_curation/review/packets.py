@@ -544,6 +544,16 @@ def approval_markdown(packet: dict[str, Any]) -> str:
         if revision_baseline_date
         else "Proposed date"
     )
+    rationale_label = (
+        "Why this event matches the identified revision"
+        if revision_baseline_date
+        else "Model rationale"
+    )
+    earlier_label = (
+        "Why earlier events did not yet contain the revision"
+        if revision_baseline_date
+        else "Why earlier events were judged incomplete"
+    )
     lines = [
         f"# {packet['display_name']} — {review_title}",
         "",
@@ -561,8 +571,8 @@ def approval_markdown(packet: dict[str, Any]) -> str:
             if event_path and event_number is not None
             else []
         ),
-        f"- Model rationale: {match.get('why_this_event_is_full_match') or 'Not available'}",
-        f"- Why earlier events were judged incomplete: {match.get('why_earlier_events_are_incomplete') or 'Not available'}",
+        f"- {rationale_label}: {match.get('why_this_event_is_full_match') or 'Not available'}",
+        f"- {earlier_label}: {match.get('why_earlier_events_are_incomplete') or 'Not available'}",
         f"- Missing or uncertain details: {json.dumps(match.get('missing_or_uncertain_details') or [])}",
     ]
     if existing:
@@ -573,6 +583,12 @@ def approval_markdown(packet: dict[str, Any]) -> str:
                 "",
                 f"- Initial approval date: {existing.get('initial_approval_date') or 'null'}",
                 f"- Initial approval URL: {existing.get('initial_approval_url') or 'null'}",
+                "",
+                "## Curator judgment",
+                "",
+                "Decide whether the newer wording is meaningful enough to replace the existing",
+                "MOAlmanac date and URL. Keeping the existing approval provenance is valid when",
+                "the wording change does not warrant a date change.",
             ]
         )
     lines.extend(

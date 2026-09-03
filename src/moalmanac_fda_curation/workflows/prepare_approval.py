@@ -15,6 +15,7 @@ from ..core.match_indication_approval_dates_from_changelog import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
     build_changelog_approval_date_matches,
+    build_revision_approval_date_matches,
     load_changelog_payload,
     load_chunked_indication_fields,
     selected_indication_indexes,
@@ -22,6 +23,7 @@ from ..core.match_indication_approval_dates_from_changelog import (
 from ..core.artifacts import (
     document_label_url,
     load_document_artifact,
+    load_json_object,
     resolve_document_application_number,
     write_json_atomic,
 )
@@ -119,14 +121,24 @@ def main() -> int:
     indexes = selected_indication_indexes(
         indications["indications"], args.indication_index
     )
-    matches = build_changelog_approval_date_matches(
-        chunked_indications=indications,
-        changelog_markdown=build_section1_changelog_markdown(changelog_payload),
-        changelog_payload=changelog_payload,
-        model=args.model,
-        max_tokens=args.max_tokens,
-        requested_indexes=indexes,
-    )
+    match_arguments = {
+        "chunked_indications": indications,
+        "changelog_markdown": build_section1_changelog_markdown(changelog_payload),
+        "changelog_payload": changelog_payload,
+        "model": args.model,
+        "max_tokens": args.max_tokens,
+        "requested_indexes": indexes,
+    }
+    if args.revision_baseline_date:
+        matches = build_revision_approval_date_matches(
+            revision_targets=load_json_object(
+                work_dir / "intermediate" / "revision-targets.json",
+                "Revision targets",
+            ),
+            **match_arguments,
+        )
+    else:
+        matches = build_changelog_approval_date_matches(**match_arguments)
     write_json_atomic(output_path, matches)
     skipped = changelog_payload.get("skipped_labels") or []
     print(f"Wrote {changelog_markdown}")
