@@ -6,11 +6,11 @@
 if [ -d .venv ]; then source .venv/bin/activate; else python3 -m venv .venv && source .venv/bin/activate; fi
 python -m pip install -e .
 export ANTHROPIC_API_KEY="..."
-moalmanac-fda-curation doctor
+moalmanac-fda-curation check-setup
 moalmanac-fda-curation --help
 ```
 
-Always inspect and reuse `.venv` before creating an environment. `doctor` reports the
+Always inspect and reuse `.venv` before creating an environment. `check-setup` reports the
 virtual-environment state and checks installation, key presence, FDA connectivity, and
 permissions for the `analyses/` parent directory. It never creates a placeholder
 curation run or prints the key.
@@ -18,10 +18,49 @@ curation run or prints the key.
 Use one work directory per curation:
 
 ```text
-analyses/<Brand>-<ApplicationNumber>/
+analyses/<ApplicationNumber>/
 ```
 
-For example, use `analyses/Yervoy-BLA125377/` for every command in a Yervoy curation.
+For example, use `analyses/BLA125377/` for every command in that application’s curation.
+Do not look up the brand name just to construct this directory.
+
+## Locate the MOAlmanac database
+
+Ask the curator: “What is the path to your local `moalmanac-db` repository?” Do this
+before checking curation status. Do not inspect sibling directories, search the filesystem or
+internet, or clone a repository to infer the answer.
+
+Resolve the supplied path to an absolute path. It is usable only when both files exist:
+
+```text
+MOALMANAC_DB_ROOT/referenced/documents.json
+MOALMANAC_DB_ROOT/referenced/indications.json
+```
+
+If either file is absent, explain which expected file was not found and ask the curator
+to correct the repository path. The database files are read-only inputs during FDA
+curation; do not edit them.
+
+## Check existing curation
+
+Before the command, explain:
+
+> I’ll check whether this application has already been curated. If it has, I’ll compare
+> the curated label with FDA’s latest approved label to see whether we need to review a
+> newer label or whether the curation is already current.
+
+Then run:
+
+```bash
+moalmanac-fda-curation check-curation-status \
+  --application-number BLA125554 \
+  --documents-json MOALMANAC_DB_ROOT/referenced/documents.json \
+  --output-json RUN_DIR/intermediate/curation-status.json
+```
+
+If the application is uncurated, continue with the new-entry workflow below. If it is
+curated and a newer label is available, use the update-analysis commands. If no newer
+label is available, do not regenerate the existing entry.
 
 ## Artifact ownership
 
@@ -34,7 +73,7 @@ For example, use `analyses/Yervoy-BLA125377/` for every command in a Yervoy cura
 - `reviewed/document.json` and `reviewed/indication.json`: curator-reviewed outputs;
   create only with `assemble-reviewed`.
 
-## Generate proposals
+## Generate first-time curation proposals
 
 Prepare the document and its review. Omitting `--label-url` selects the latest approved
 label:
@@ -64,11 +103,48 @@ moalmanac-fda-curation prepare-selected-review \
 This generates descriptions, approval evidence, and the three stage-specific files for
 each selected indication.
 
+## Analyze a newer label for an existing entry
+
+Prepare the latest label, extract its indications, and reconcile them against MOAlmanac
+in one command:
+
+```bash
+moalmanac-fda-curation find-new-indications \
+  --application-number BLA125554 \
+  --database-dir MOALMANAC_DB_ROOT \
+  --work-dir RUN_DIR
+```
+
+Successful matches require no separate review. When an existing indication is not found
+or cannot be matched confidently, the command writes one evidence file per mapping in
+`review/indication-matches/`; stop for curator review in that case. Otherwise,
+curate any printed new-indication indexes, or proceed directly to revision analysis when
+there are none.
+
+Find changed indications and prepare their screening files in one command:
+
+```bash
+moalmanac-fda-curation find-revised-indications \
+  --database-dir MOALMANAC_DB_ROOT \
+  --work-dir RUN_DIR
+```
+
+After revision screening decisions are recorded:
+
+```bash
+moalmanac-fda-curation prepare-revision-reviews --work-dir RUN_DIR
+```
+
+The command prints the latest-label indexes prepared for review. Review each through its
+description and label date and URL files, one stage at a time. Its JSON
+artifacts remain under `intermediate/`; do not present them unless requested.
+
 The tool chooses stable filenames:
 
 ```text
 review/document.md
 review/indication-candidates.md
+review/revision-screening/<display-name-slug>.md
 review/indications/<display-name-slug>/indication.md
 review/indications/<display-name-slug>/description.md
 review/indications/<display-name-slug>/approval.md
@@ -88,14 +164,19 @@ moalmanac-fda-curation record-decision \
   --decision accepted
 ```
 
-Valid stages are `document`, `indication`, `description`, and `approval`. Valid
-decisions are `accepted`, `edited`, `excluded`, and `unresolved`.
+Valid stages are `document`, `revision`, `indication`, `description`, and `approval`.
+Revision screening uses `use_latest`, `keep_existing`, or `unresolved`; the other stages
+use `accepted`, `edited`, `excluded`, or `unresolved` as applicable.
 
 For an approved edit, repeat `--override FIELD=JSON_VALUE`. Example:
 
 ```bash
 --decision edited --override 'raw_cancer_type="non-small cell lung cancer"'
 ```
+
+For a revision field that should retain its current MOAlmanac value, use
+`--keep-existing-field FIELD`. The tool retrieves the value from the persisted existing
+record and writes the resulting override; the harness should not reproduce that value.
 
 Never run this command before the curator states the decision. It locates and hashes the
 stage's source artifacts, records the decision, and rebuilds the affected review file.
@@ -112,13 +193,17 @@ This writes `reviewed/document.json` and `reviewed/indication.json`. It refuses 
 missing, or unresolved required decisions. Never use `--overwrite` without explicit
 curator approval.
 
+For an update session, assemble resolved revisions separately:
+
+```bash
+moalmanac-fda-curation assemble-revisions \
+  --work-dir RUN_DIR \
+  --database-dir MOALMANAC_DB_ROOT
+```
+
+This preserves existing IDs and writes complete revised document, label URL, and
+indication records plus targeted document and URL update artifacts under `reviewed/`.
+It refuses stale or unresolved review state.
+
 After recording an edit, show only the resolved edited field/value from the rebuilt
 review packet in chat and obtain confirmation before continuing.
-
-## Dependency behavior
-
-- A selected-label or application change stales all downstream artifacts.
-- A meaningful indication edit stales its description and approval decision.
-- Excluded indications receive no further review or assembly.
-- A description edit does not stale the indication or approval evidence.
-- An approval edit does not require regenerating extraction or description artifacts.

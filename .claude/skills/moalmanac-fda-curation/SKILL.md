@@ -1,140 +1,91 @@
 ---
 name: moalmanac-fda-curation
-description: Guide evidence-backed review of new MOAlmanac entries from FDA oncology product labels. Use the repository CLI to select an approved label, generate document and indication proposals, review one indication end-to-end with source provenance, record explicit curator decisions, and assemble reviewed document.json and indication.json outputs.
+description: Determine whether an FDA oncology application needs first-time curation or newer-label review, then guide curator review of new indications and changes to existing MOAlmanac indications using the repository CLI.
 ---
 
 # Curate an FDA label for MOAlmanac
 
-Use the pipeline for extraction, generation, matching, validation, and state changes.
-Use the harness to orchestrate tools, present compact evidence, assess proposals, and
-ask for curator decisions.
+Use the CLI for all extraction, matching, validation, proposal generation, and state
+changes. This skill coordinates those commands, routes from their outputs, presents
+review files, and obtains explicit curator decisions. Use a harness assessment only as
+an optional second check of curator-facing evidence.
 
 ## Protect source and generated output
 
 - Treat downloaded labels and every pipeline-generated artifact as immutable.
 - Never edit generated JSON, Markdown, changelogs, or source files.
-- Never infer approval from silence or from successful execution.
-- Record a decision only after the curator explicitly accepts, edits, excludes, or
-  marks the item unresolved.
-- Use `record-decision` for every state change. Do not write decision files manually.
+- Never infer approval from silence or successful execution.
+- Use `record-decision` for supported state changes; do not write decision files manually.
 - Explain what `--overwrite` will regenerate and obtain confirmation first.
-- Never replace the selected label version or use openFDA label text as a fallback.
+- Never replace the selected label version or substitute a different source.
 
-## Start safely
+## Start and route every session
 
 1. Read [references/workflow-tools.md](references/workflow-tools.md).
-2. Check for `.venv` before installing anything. If it exists, activate and reuse it.
-   Create `.venv` only when it is absent. Then run `moalmanac-fda-curation doctor`
-   inside the active environment and resolve failures before curation.
+2. Check for `.venv` before installing anything. Reuse it when present; create it only
+   when absent. Run `moalmanac-fda-curation check-setup` in the active environment and
+   resolve failures before curation.
 3. Obtain the NDA or BLA application number. If unknown, direct the curator to search
    Drugs@FDA by drug or active ingredient; never guess it.
-4. Use `prepare-document-review` without `--label-url` for the latest approved label.
-   Use a specific FDA label URL only when the curator requests an earlier version.
-5. Show the selected label date before downstream extraction. Keep the FDA URL in
-   pipeline data, not in curator-facing review Markdown.
-6. Use one work directory for the entire curation, named
-   `analyses/<Brand>-<ApplicationNumber>/`, for example
-   `analyses/Yervoy-BLA125377/`. Reuse that exact path for every workflow command.
+4. Ask the curator for the path to their local `moalmanac-db` repository. Do not infer
+   its location or search for it. Validate the supplied path using
+   [references/workflow-tools.md#locate-the-moalmanac-database](references/workflow-tools.md#locate-the-moalmanac-database).
+   Before running `check-curation-status`, say: “I’ll check whether this application has
+   already been curated. If it has, I’ll compare the curated label with FDA’s latest
+   approved label to see whether we need to review a newer label or whether the curation
+   is already current.”
+   Run `check-curation-status` before preparing a document or extracting indications,
+   using `RUN_DIR/intermediate/curation-status.json` for `--output-json`.
+5. Give one short curation-status summary. For an existing application, include the
+   curated label date and either the newer FDA label date or that the curation is current.
+   Treat branch references as internal guidance and continue the curator conversation:
+   - `previously_curated: false`: read
+     [references/new-curation.md](references/new-curation.md) and follow it.
+   - `previously_curated: true` and `newer_label_available: false`: report that no
+     newer approved label needs review and stop.
+   - `previously_curated: true` and `newer_label_available: true`: say, “Since we've
+     curated this drug before, let's see whether the newer label contains any new
+     indications or changes to existing ones.” Then read
+     [references/update-curation.md](references/update-curation.md) and follow it.
+6. If the curation status is ambiguous or the command fails, stop rather than choosing a
+   branch from filenames, drug names, or memory.
 
-## Generate efficiently, review vertically
-
-Use these curator-facing phases:
-
-1. Run `prepare-document-review` to generate the document proposal and `document.md`;
-   review the document.
-2. Run `extract-indication-candidates` to generate all indication proposals and
-   `indication-candidates.md`; ask which candidates should continue.
-3. After one plain-language preview, run `prepare-selected-review` to generate
-   descriptions, approval evidence, and stage-specific review files only for the
-   selected candidates.
-4. For one selected indication, generate and review `indication.md`, `description.md`,
-   and `approval.md` in sequence before moving to the next indication.
-5. Record each explicit decision with `record-decision`.
-6. Run `assemble-reviewed` only when all retained indications are complete.
-
-`record-decision` automatically rebuilds the corresponding review file. After an edit,
-show only the resolved edited field and value in chat, then ask the curator to confirm it
-is correct. Do not continue until they confirm. If they correct it, record the replacement
-edit and confirm again.
-
-Keep supported batch operations batched. Do not insert curator confirmation between
-internal pipeline stages when no review occurs there.
-
-Use the proposal's descriptive `review_label` as the heading. Keep the numeric pipeline
-index available only for tool calls and provenance.
+Use one work directory for the session, named `analyses/<ApplicationNumber>/`, and reuse
+that path for every command. The application number is sufficient; do not perform a
+separate brand-name lookup merely to name the directory.
 
 ## Present source-backed review
 
-Read [references/review-formats.md](references/review-formats.md). For each decision,
-provide a prominent link to the deterministically generated Markdown review file.
-Do not reproduce or paraphrase that file's source text, proposal fields, rationale, or
-verification in chat. The file is the canonical review surface.
+Read [references/review-formats.md](references/review-formats.md) when the selected
+branch produces curator-facing review files. Link the generated file prominently and
+do not reproduce its proposal or source evidence in chat. Use chat only for the link,
+a clearly labeled harness assessment, and numbered decision options.
 
-Use chat only to show:
+Quote from a review file only to answer a specific curator question and identify it as
+a quotation. Say “Indications and Usage,” not “Section 1.” Distinguish curation
+provenance from fields intended for MOAlmanac output.
 
-1. the review-file link;
-2. **Harness assessment** — clearly labeled reasoning produced by the harness; and
-3. numbered decision options to accept, edit, exclude, inspect evidence, or ask a
-   question.
-
-Quote from a review file in chat only when answering a specific curator question, and
-label the text as a quotation from that file.
-
-Say “Indications and Usage,” not “Section 1.” Clearly distinguish curation provenance
-(application, selected label, local files) from fields that will appear in
-`document.json` or `indication.json`.
-
-Use converted Markdown as the primary source for in-context review. Every review file
-after document review must link to both the local label Markdown and PDF. The document
-review is the only exception because extraction has not created those local files yet.
-Do not promise that the harness can render the PDF.
+Use converted Markdown as the primary source for in-context review. Review files after
+document review must link to the local label Markdown and PDF. Do not promise that the
+harness can render the PDF.
 
 ## Explain before shell confirmation
 
-Before submitting a meaningful shell command, explain in plain language:
+Before a meaningful command, explain its curator-facing purpose and what the curator
+will review. Mention a generated artifact when it is a review surface the curator will
+open. Then submit the command so the shell-approval dialog provides confirmation.
 
-- the curation phase and why it is needed;
-- the information it will retrieve or generate;
-- which local artifact group it will write; and
-- what the curator will review after it completes.
-
-Then submit the command so the harness's shell-approval dialog is the confirmation.
-Do not ask a redundant conversational “ready?” when the shell approval will immediately
-follow. Group uninterrupted pipeline work under one explanation and, where possible,
-one wrapper command. Give a new explanation only at a meaningful curator boundary,
-before an overwrite, or when the planned scope or cost changes.
-
-## Assess descriptions
-
-Assess only detail added from Clinical Studies or Clinical Pharmacology. Do not assess or
-comment on other wording differences between the description and indication; those are
-intentional editorial transformations owned by the description prompt, including ASCO
-Language of Respect, person-first phrasing, standardized terminology, generic drug names,
-clear abbreviation expansion, and `variant` instead of `mutation`.
-
-For added Clinical Studies or Clinical Pharmacology detail, assess:
-
-- whether it resolves a real ambiguity in the indication;
-- whether the selected source supports it; and
-- whether it adds irrelevant trial design, population, endpoint, or efficacy detail.
-
-Recommend removing the added detail when it does not clarify the approval. Do not apply
-the recommendation without explicit curator approval.
-
-Ensure `description.md` and `approval.md` repeat the current curator-reviewed indication
-near the top. The curator must be able to judge description relevance and approval-date
-reasoning without reopening another file to remember the indication.
-
-Read [references/review-standards.md](references/review-standards.md) for clinical
-review rules and [references/moalmanac-examples.md](references/moalmanac-examples.md)
-only when checking final shape or editorial precedent.
+Group uninterrupted internal pipeline work under one explanation. Give another
+explanation at a curator boundary, before overwrite, or when scope or cost changes.
 
 ## Stop conditions
 
-Stop rather than improvise when source extraction is unusable, a proposal lacks source
-support, historical coverage is incomplete, an approval event fails verification, or
-review decisions are stale relative to their source hashes.
+Stop when a command reports an unresolved condition or produces a curator-review file.
+Do not reproduce or independently reimplement the command's validation logic in the
+skill. If useful, add a clearly labeled harness assessment of the generated review
+evidence without treating it as pipeline state.
 
-The workflow creates reviewed new-entry drafts only. Do not revise existing MOAlmanac
-records, change `moalmanac-db`, commit, push, or open a pull request unless the curator
-makes a separate explicit request.
+For changed indications, assemble revision output only after the curator resolves the
+revision screening, description, and label date and URL reviews. Report the assembled
+output without adding another review step. Do not revise `moalmanac-db`, commit, push, or
+open a pull request without a separate explicit request.

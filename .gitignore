@@ -5,4 +5,7 @@ __pycache__/
 .env
 *.egg-info/
 outputs/
-analyses/
+analyses/*
+!analyses/check-curation-preflight.ipynb
+!analyses/identify-new-indications.ipynb
+!analyses/revise-existing-indications.ipynb

@@ -8,10 +8,11 @@ This is a downstream FDA-indication curation step. It starts from:
 3. ``section1-changelogs/*-section1-changelog.json`` for deterministic
    verification.
 
-In one call, this script asks Claude to identify the earliest changelog event
-whose After text fully supports each current indication. The LLM returns only
-an event number and reasoning. Dates, change types, URLs, and exact source text
-are then populated deterministically from the changelog JSON.
+For new indications, this script asks Claude when the cumulative label history
+first supports each current indication. For revised indications, it instead
+matches the already-identified revision to the event that introduced it. The
+LLM returns only an event number and reasoning. Dates, change types, URLs, and
+exact source text are then populated deterministically from the changelog JSON.
 
 Example:
     python match_indication_approval_dates_from_changelog.py \
@@ -217,7 +218,8 @@ def build_changelog_match_prompt(
 You are matching one current FDA indication to a Section 1 changelog.
 
 Task:
-Identify the earliest changelog event where the target indication is fully supported.
+Identify the earliest changelog event at which the cumulative label history supports
+the target indication in its current form.
 
 Target indication:
 {indication["indication"]}
@@ -227,12 +229,14 @@ Target structured fields:
 
 Strict matching rules:
 - Use only the target indication, target structured fields, and changelog text below.
-- A match requires the event After text to contain or unambiguously preserve every clinically meaningful qualifier in the target indication.
+- The initial event's After text is the complete baseline Indications and Usage text. Each later event's Before and After text contains only the passage changed by that event, not the complete section at that date.
+- Interpret later events cumulatively from the initial baseline. When the target is absent from a later event, that means the event did not change its passage; its absence from that change span is not evidence that it was absent from the label.
+- Choose the event that introduces or changes the last clinically meaningful qualifier needed for the current target indication.
 - Clinically meaningful qualifiers include adult/pediatric population, age group, disease stage, resectability, line of therapy, biomarker status, companion diagnostic language, therapeutic regimen, combination partners, prior-treatment requirements, limitations of use, and accelerated/full approval conditions when relevant.
 - If an earlier event introduces the disease or regimen but a later event adds a qualifier from the current target indication, choose the later event.
 - If the target indication says "adult patients" and an earlier event says only "patients", do not choose the earlier event unless that event itself establishes the adult population.
 - If the target indication includes a biomarker, disease-stage, line-of-therapy, prior-treatment, or population qualifier that is absent from an earlier event, do not choose that earlier event.
-- For replace events, compare Before and After. Choose the event only if the After text is the first full match.
+- For replace events, compare Before and After to determine what that event adds, removes, or changes in the cumulative indication.
 - Prefer exact wording matches, but allow minor formatting differences such as line breaks, bullets, cross-references, or abbreviation expansion when all qualifiers are preserved.
 - If the changelog does not contain enough evidence for a full match, return status "unresolved".
 - Do not infer from outside knowledge.
@@ -326,22 +330,17 @@ def event_by_number(
     changelog_events: list[dict[str, Any]],
     event_number: int | None,
 ) -> dict[str, Any] | None:
-    """Return the changelog event with a 1-based event number."""
+    """Return the changelog event with the requested persistent event number."""
     if event_number is None:
         return None
-    if event_number < 1 or event_number > len(changelog_events):
-        return None
-    event = changelog_events[event_number - 1]
-    if event.get("event_number") != event_number:
-        return next(
-            (
-                candidate
-                for candidate in changelog_events
-                if candidate.get("event_number") == event_number
-            ),
-            None,
-        )
-    return event
+    return next(
+        (
+            event
+            for event in changelog_events
+            if event.get("event_number") == event_number
+        ),
+        None,
+    )
 
 
 def quote_in_text(quote: str | None, text: str | None) -> bool:
@@ -580,6 +579,137 @@ def build_changelog_approval_date_matches(
                 "batch_usage": usage,
             }
         )
+    return results
+
+
+def build_revision_changelog_match_prompt(
+    targets: list[dict[str, Any]],
+    changelog_markdown: str,
+) -> str:
+    """Build a prompt that dates changes already attributed to revised indications."""
+    prompt_targets = [
+        {
+            "indication_index": local_index,
+            "latest_indication": target["latest_indication"],
+            "identified_revision_reason": target.get("reason"),
+            "identified_label_changes": [
+                {
+                    "previous_label_text": change.get("baseline_text"),
+                    "latest_label_text": change.get("latest_text"),
+                }
+                for change in target.get("label_changes") or []
+            ],
+        }
+        for local_index, target in enumerate(targets)
+    ]
+    return f"""
+You are matching already-identified FDA indication revisions to a historical
+Indications and Usage changelog.
+
+For every indexed target, identify the earliest changelog event that introduced
+the identified revision's latest-label wording or meaning. The revision assessment
+has already determined that the supplied label change applies to the indication;
+do not independently reassess whether the indication was revised.
+
+Matching rules:
+- Use the identified label change as the primary matching target. Use the latest
+  indication only to resolve which indication the change belongs to.
+- Consider only the supplied changelog events, which are already limited to dates
+  after the previously curated label through the latest label.
+- Later changelog events contain changed passages rather than complete label
+  snapshots. Match the identified revision to the event whose After text first
+  introduces its latest-label wording or meaning.
+- For replacement events, compare Before and After to confirm that the event made
+  the identified change.
+- Select the earliest event that supports the identified revision in its current
+  form. Return unresolved when the supplied events do not establish one.
+- Return exactly one result for every indication_index, in input order.
+- Keep the selection reason focused on how the event corresponds to the already-
+  identified revision.
+- Use only the supplied evidence and do not use outside clinical knowledge.
+
+For each result return:
+- indication_index
+- status: "matched" or "unresolved"
+- changelog_event_number
+- selection_reason
+- why_earlier_events_are_incomplete
+- missing_or_uncertain_details
+
+Return only the event pointer and assessment fields. Date, URL, change type, and
+exact Before/After text will be populated deterministically from the selected event.
+
+Revision targets:
+{json.dumps(prompt_targets, indent=2, ensure_ascii=False)}
+
+Changelog Markdown:
+{changelog_markdown}
+""".strip()
+
+
+def build_revision_approval_date_matches(
+    chunked_indications: dict[str, Any],
+    revision_targets: dict[str, Any],
+    changelog_markdown: str,
+    changelog_payload: dict[str, Any],
+    model: str,
+    max_tokens: int,
+    requested_indexes: list[int] | None,
+) -> list[dict[str, Any]]:
+    """Match identified revisions to their first supporting historical events."""
+    indications = chunked_indications["indications"]
+    indexes = selected_indication_indexes(indications, requested_indexes)
+    targets_by_index = {
+        target.get("latest_indication_index"): target
+        for target in revision_targets.get("targets") or []
+    }
+    missing = [index for index in indexes if index not in targets_by_index]
+    if missing:
+        raise ValueError(f"Revision targets are missing indication indexes: {missing}")
+    selected_indications = [indications[index] for index in indexes]
+    selected_targets = [
+        {
+            **targets_by_index[index],
+            "latest_indication": indications[index],
+        }
+        for index in indexes
+    ]
+
+    from .match_indication_approval_dates_batch import (
+        call_claude_for_batch_changelog_matches,
+        materialize_verified_results,
+    )
+
+    prompt = build_revision_changelog_match_prompt(selected_targets, changelog_markdown)
+    raw_matches, usage = call_claude_for_batch_changelog_matches(
+        prompt=prompt,
+        model=model,
+        max_tokens=max(max_tokens, len(selected_indications) * 160),
+    )
+    local_results = materialize_verified_results(
+        matches=raw_matches,
+        chunked_indications={
+            **chunked_indications,
+            "indications": selected_indications,
+        },
+        changelog_events=changelog_payload["events"],
+    )
+    results = [
+        {
+            "indication_index": indexes[item["indication_index"]],
+            "indication": item["indication"],
+            "source_chunk_text": item["source_chunk_text"],
+            "llm_selection": item["llm_selection"],
+            "llm_match": item["materialized_match"],
+            "verification": item["verification"],
+        }
+        for item in local_results
+    ]
+    print(
+        "revision-date matching usage: "
+        f"{usage['input_tokens']} input tokens, "
+        f"{usage['output_tokens']} output tokens"
+    )
     return results
 
 

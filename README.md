@@ -1,11 +1,13 @@
 # MOAlmanac FDA Curation Assistant
 
-An agentic, human-in-the-loop workflow for evidence-backed FDA label curation for the
-[Molecular Oncology Almanac](https://moalmanac.org).
+This project helps curators add FDA-approved oncology indications to the
+[Molecular Oncology Almanac](https://moalmanac.org) and keep existing entries current
+when labels change.
 
-The pipeline retrieves label evidence and generates structured proposals. A reusable
-skill lets Claude or Codex guide the curator through source-linked review, edits,
-exclusions, and final assembly.
+Give it an FDA application number and it finds the relevant label, checks what
+MOAlmanac has already curated, and guides you through only the decisions that need human
+review. You can compare proposed entries with their FDA evidence, make corrections, and
+produce reviewed JSON ready for the database.
 
 ## Get started
 
@@ -29,36 +31,25 @@ source evidence, and ask questions without losing your place.
 
 ## Curate with Claude
 
-Open the cloned repository in the Claude desktop app's Code tab, then invoke the project
-skill:
+Open the repository in Claude's Code tab and run:
 
 ```text
 /moalmanac-fda-curation
 ```
 
-Provide an NDA or BLA application number when prompted. The skill selects the latest
-approved label, explains each phase, and links the generated review files. You can ask
-questions, inspect local source evidence, edit proposals, exclude indications, and accept
-the final reviewed output.
-
 ## Curate with ChatGPT
 
-Open the cloned repository in Codex in the ChatGPT desktop app and ask:
+Open the repository in Codex and ask:
 
 ```text
-Use the MOAlmanac FDA curation skill at
-.claude/skills/moalmanac-fda-curation/SKILL.md to curate a new FDA label.
+Use the MOAlmanac FDA curation skill in this repository.
 ```
 
-Then provide the NDA or BLA application number when prompted. The review workflow and
-outputs are the same in either harness.
+In either app, provide an NDA or BLA application number when prompted.
 
 To find the application number, search the drug or active ingredient in
 [Drugs@FDA](https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm). Open the product
 record and use its NDA or BLA number, for example `NDA208558` or `BLA761174`.
-
-Completed runs write `reviewed/document.json` and `reviewed/indication.json`. Generated
-proposals remain separate from explicitly accepted curator decisions.
 
 ## Manual setup and troubleshooting
 
@@ -73,13 +64,16 @@ src/moalmanac_fda_curation/
   review/                     Review packets, decisions, and final assembly
   workflows/                  Curator-facing workflow orchestration
   cli.py                      Stable command-line entry point
-  doctor.py                   Installation and environment checks
+  doctor.py                   Implementation for the `check-setup` command
 .claude/skills/               Agent workflow instructions
 tests/                        Workflow and review tests
-analyses/                     Local curation runs; not committed
+analyses/                     Revision notebook plus ignored local curation runs
 ```
 
 ## Current scope
 
-The workflow currently creates new entries from FDA labels. It does not yet revise
-existing MOAlmanac records, update `moalmanac-db`, or open pull requests.
+The reviewed workflows create new entries from FDA labels and update existing entries
+when a newer label changes their indications. The CLI checks whether an application was
+previously curated, identifies new and changed indications, records explicit curator
+decisions, and assembles reviewed JSON artifacts for the affected MOAlmanac records. The
+project does not write directly to `moalmanac-db`, commit, push, or open pull requests.

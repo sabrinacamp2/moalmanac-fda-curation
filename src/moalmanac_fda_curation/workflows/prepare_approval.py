@@ -15,6 +15,7 @@ from ..core.match_indication_approval_dates_from_changelog import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
     build_changelog_approval_date_matches,
+    build_revision_approval_date_matches,
     load_changelog_payload,
     load_chunked_indication_fields,
     selected_indication_indexes,
@@ -22,9 +23,26 @@ from ..core.match_indication_approval_dates_from_changelog import (
 from ..core.artifacts import (
     document_label_url,
     load_document_artifact,
+    load_json_object,
     resolve_document_application_number,
     write_json_atomic,
 )
+
+
+def post_baseline_changelog(
+    payload: dict, baseline_date: str, latest_date: str
+) -> dict:
+    """Return only selectable events for the current revised indication form."""
+    events = [
+        event
+        for event in payload["events"]
+        if baseline_date < event.get("date", "") <= latest_date
+    ]
+    if not events:
+        raise ValueError(
+            "No changelog events fall after the curated label through the latest label"
+        )
+    return {**payload, "events": events}
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,6 +54,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--indication-index", type=int, action="append")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
+    parser.add_argument(
+        "--revision-baseline-date",
+        help="Use only changelog events after this previously curated label date.",
+    )
     parser.add_argument(
         "--overwrite",
         action="store_true",
@@ -90,17 +112,33 @@ def main() -> int:
         )
 
     changelog_payload = load_changelog_payload(changelog_json)
+    if args.revision_baseline_date:
+        changelog_payload = post_baseline_changelog(
+            changelog_payload,
+            args.revision_baseline_date,
+            document["publication_date"],
+        )
     indexes = selected_indication_indexes(
         indications["indications"], args.indication_index
     )
-    matches = build_changelog_approval_date_matches(
-        chunked_indications=indications,
-        changelog_markdown=build_section1_changelog_markdown(changelog_payload),
-        changelog_payload=changelog_payload,
-        model=args.model,
-        max_tokens=args.max_tokens,
-        requested_indexes=indexes,
-    )
+    match_arguments = {
+        "chunked_indications": indications,
+        "changelog_markdown": build_section1_changelog_markdown(changelog_payload),
+        "changelog_payload": changelog_payload,
+        "model": args.model,
+        "max_tokens": args.max_tokens,
+        "requested_indexes": indexes,
+    }
+    if args.revision_baseline_date:
+        matches = build_revision_approval_date_matches(
+            revision_targets=load_json_object(
+                work_dir / "intermediate" / "revision-targets.json",
+                "Revision targets",
+            ),
+            **match_arguments,
+        )
+    else:
+        matches = build_changelog_approval_date_matches(**match_arguments)
     write_json_atomic(output_path, matches)
     skipped = changelog_payload.get("skipped_labels") or []
     print(f"Wrote {changelog_markdown}")

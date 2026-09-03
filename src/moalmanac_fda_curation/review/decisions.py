@@ -12,8 +12,8 @@ from typing import Any
 
 from ..core.artifacts import file_sha256, load_json_object, write_json_atomic
 
-VALID_STAGES = {"document", "indication", "description", "approval"}
-VALID_DECISIONS = {"accepted", "edited", "excluded", "unresolved"}
+VALID_STAGES = {"document", "revision", "indication", "description", "approval"}
+VALID_DECISIONS = {"accepted", "edited", "excluded", "unresolved", "use_latest", "keep_existing"}
 ALLOWED_OVERRIDES = {
     "document": {"company", "name", "description", "aliases", "status"},
     "indication": {
@@ -24,6 +24,12 @@ ALLOWED_OVERRIDES = {
     },
     "description": {"description"},
     "approval": {"initial_approval_date", "initial_approval_url"},
+    "revision": {
+        "indication",
+        "raw_biomarkers",
+        "raw_cancer_type",
+        "raw_therapeutics",
+    },
 }
 
 
@@ -75,6 +81,10 @@ def record_decision(
         raise ValueError(f"Unknown stage: {stage}")
     if decision not in VALID_DECISIONS:
         raise ValueError(f"Unknown decision: {decision}")
+    if stage == "revision" and decision not in {"use_latest", "keep_existing", "unresolved"}:
+        raise ValueError("Revision screening requires use_latest, keep_existing, or unresolved")
+    if stage != "revision" and decision in {"use_latest", "keep_existing"}:
+        raise ValueError(f"Decision {decision} is only valid for revision screening")
     if stage == "document" and indication_index is not None:
         raise ValueError("Document decisions must not include an indication index")
     if stage != "document" and indication_index is None:
@@ -83,8 +93,8 @@ def record_decision(
         raise ValueError("Only an indication can be excluded")
     if decision == "edited" and not overrides:
         raise ValueError("An edited decision requires at least one override")
-    if decision != "edited" and overrides:
-        raise ValueError("Overrides are only valid for an edited decision")
+    if decision not in {"edited", "use_latest"} and overrides:
+        raise ValueError("Overrides require an edited or use_latest decision")
     unexpected_overrides = set(overrides) - ALLOWED_OVERRIDES[stage]
     if unexpected_overrides:
         raise ValueError(
@@ -158,6 +168,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--decision", choices=sorted(VALID_DECISIONS), required=True)
     parser.add_argument("--indication-index", type=int)
     parser.add_argument("--override", action="append", type=parse_override, default=[])
+    parser.add_argument(
+        "--keep-existing-field",
+        action="append",
+        default=[],
+        help="Fill this override from the existing MOAlmanac revision target.",
+    )
     parser.add_argument("--note")
     parser.add_argument("--display-name", help="Curator-facing indication title for the review log.")
     return parser.parse_args()
@@ -172,7 +188,50 @@ def one_file(directory: Path, pattern: str, name: str) -> Path:
     return matches[0]
 
 
-def review_inputs(work_dir: Path, stage: str) -> tuple[list[Path], list[str]]:
+def revision_context(work_dir: Path, indication_index: int | None) -> str | None:
+    path = work_dir / "intermediate" / "revision-targets.json"
+    if indication_index is None or not path.exists():
+        return None
+    payload = load_json_object(path, "Revision targets")
+    indexes = {
+        item.get("latest_indication_index") for item in payload.get("targets") or []
+    }
+    return payload.get("baseline_label_date") if indication_index in indexes else None
+
+
+def existing_field_overrides(
+    work_dir: Path,
+    indication_index: int | None,
+    fields: list[str],
+) -> dict[str, Any]:
+    """Retrieve selected fields from one existing MOAlmanac indication record."""
+    if not fields:
+        return {}
+    if indication_index is None:
+        raise ValueError("Keeping existing fields requires an indication index")
+    payload = load_json_object(
+        work_dir / "intermediate" / "revision-targets.json", "Revision targets"
+    )
+    targets = [
+        target
+        for target in payload.get("targets") or []
+        if target.get("latest_indication_index") == indication_index
+    ]
+    if len(targets) != 1:
+        raise ValueError(
+            f"Expected one revision target for indication {indication_index}; "
+            f"found {len(targets)}"
+        )
+    existing = targets[0].get("existing_indication") or {}
+    missing = [field for field in fields if field not in existing]
+    if missing:
+        raise ValueError(f"Existing indication is missing fields: {missing}")
+    return {field: existing[field] for field in fields}
+
+
+def review_inputs(
+    work_dir: Path, stage: str, indication_index: int | None = None
+) -> tuple[list[Path], list[str]]:
     document = work_dir / "intermediate" / "document.proposal.json"
     if stage == "document":
         return [document], ["--document-json", str(document)]
@@ -195,12 +254,35 @@ def review_inputs(work_dir: Path, stage: str) -> tuple[list[Path], list[str]]:
         "--label-markdown",
         str(label_markdown),
     ]
+    baseline_date = revision_context(work_dir, indication_index)
+    if baseline_date:
+        revision_targets = work_dir / "intermediate" / "revision-targets.json"
+        sources.append(revision_targets)
+        command.extend(("--revision-targets-json", str(revision_targets)))
+    if stage == "revision":
+        revision_assessment = work_dir / "intermediate" / "revision-assessment.json"
+        sources.append(revision_assessment)
+        command.extend(("--revision-assessment-json", str(revision_assessment)))
+        baseline_pdfs = sorted(
+            (work_dir / "historical-labels").rglob(f"*{baseline_date}*.pdf")
+        )
+        if baseline_pdfs:
+            command.extend(("--baseline-label-pdf", str(baseline_pdfs[0])))
+        return sources, command
     if stage == "description":
-        descriptions = work_dir / "intermediate" / "selected-description-proposals.json"
+        descriptions = work_dir / "intermediate" / (
+            "selected-revision-description-proposals.json"
+            if baseline_date
+            else "selected-description-proposals.json"
+        )
         sources.append(descriptions)
         command.extend(("--descriptions-json", str(descriptions)))
     if stage == "approval":
-        approvals = work_dir / "intermediate" / "selected-approval-evidence.json"
+        approvals = work_dir / "intermediate" / (
+            "selected-revision-date-evidence.json"
+            if baseline_date
+            else "selected-approval-evidence.json"
+        )
         changelog = one_file(
             work_dir / "intermediate" / "section1-changelogs",
             "*-section1-changelog.md",
@@ -215,6 +297,8 @@ def review_inputs(work_dir: Path, stage: str) -> tuple[list[Path], list[str]]:
                 str(changelog),
             )
         )
+        if baseline_date:
+            command.extend(("--revision-baseline-date", baseline_date))
     return sources, command
 
 
@@ -223,9 +307,26 @@ def main() -> int:
     work_dir = args.work_dir.resolve()
     decisions_path = work_dir / "review" / "decisions.json"
     review_log = work_dir / "review" / "review.md"
-    sources, review_command = review_inputs(work_dir, args.stage)
+    sources, review_command = review_inputs(
+        work_dir, args.stage, args.indication_index
+    )
     payload = load_decisions(decisions_path)
     overrides = dict(args.override)
+    requested_existing = list(dict.fromkeys(args.keep_existing_field))
+    unsupported_existing = set(requested_existing) - ALLOWED_OVERRIDES[args.stage]
+    if unsupported_existing:
+        raise ValueError(
+            f"Unsupported {args.stage} existing field(s): {sorted(unsupported_existing)}"
+        )
+    duplicate_fields = set(overrides) & set(requested_existing)
+    if duplicate_fields:
+        raise ValueError(
+            "Fields cannot use both --override and --keep-existing-field: "
+            f"{sorted(duplicate_fields)}"
+        )
+    overrides.update(
+        existing_field_overrides(work_dir, args.indication_index, requested_existing)
+    )
     record_decision(
         payload=payload,
         stage=args.stage,

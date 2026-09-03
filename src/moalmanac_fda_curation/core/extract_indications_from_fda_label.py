@@ -161,7 +161,10 @@ def write_bytes(path: Path, content: bytes, overwrite: bool = False) -> Path:
 
 def heading_pattern(heading: str) -> str:
     """Build a heading regex that tolerates converted-PDF spacing differences."""
-    escaped_words = [re.escape(word) for word in heading.split()]
+    words = heading.split()
+    escaped_words = [re.escape(word) for word in words]
+    if words and words[0].isdigit():
+        escaped_words[0] += r"\.?"
     return r"[ \t]+".join(escaped_words)
 
 
@@ -241,8 +244,13 @@ def extract_highlights_drug_class(highlights: str | None) -> str | None:
         if not line:
             continue
 
+        # Two-column FDA Highlights pages are often converted in alternating
+        # column order. A bullet from the other column can therefore appear
+        # before, or between the two lines of, the shared drug-class stem.
+        # Ignore bullet lines while searching instead of assuming the first
+        # bullet marks the end of the introductory sentence.
         if line.startswith(("•", "")):
-            break
+            continue
 
         # In two-column conversions, the adjacent column is often appended
         # after a bullet separator on the same line.
@@ -327,6 +335,9 @@ Rules:
 - Preserve raw wording for the helper fields where possible.
 - Repeat shared indication stems when the text contains multiple standalone indications.
 - Keep directly related patient-selection, companion diagnostic, limitation-of-use, accelerated approval, continued approval, and other regulatory qualifier text with the indication it modifies.
+- When one patient-selection or companion-diagnostic statement applies to multiple
+  standalone indications, repeat it in every applicable extracted indication. Apply
+  it only within the subsection or scope established by the source text.
 - Do not split bullets that are alternatives, criteria, limitations, or patient-selection
   details under the same indication; fold them into the parent indication.
 - If a Highlights drug-class phrase is provided, combine that phrase with each

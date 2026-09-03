@@ -118,7 +118,7 @@ def record_label_urls(record: dict[str, Any]) -> list[str]:
 
 def resolve_document_application_number(document: dict[str, Any]) -> str:
     """Resolve an NDA/BLA/ANDA application number from a document artifact."""
-    identification_number = str(document["identification_number"])
+    identification_number = f"{document['identification_number']:06d}"
     label_url = document_label_url(document)
     matches: list[tuple[str, dict[str, Any]]] = []
 

@@ -1,0 +1,630 @@
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from io import StringIO
+from pathlib import Path
+from unittest.mock import patch
+
+from moalmanac_fda_curation import cli
+from moalmanac_fda_curation.core.match_indication_approval_dates_from_changelog import (
+    build_changelog_match_prompt,
+    build_revision_changelog_match_prompt,
+    event_by_number,
+)
+from moalmanac_fda_curation.core.match_indication_approval_dates_batch import (
+    build_batch_changelog_match_prompt,
+)
+from moalmanac_fda_curation.workflows import (
+    check_preflight,
+    find_revised_indications,
+    prepare_approval,
+    prepare_label_history,
+    prepare_revision_reviews,
+    prepare_update_indications,
+    reconcile_indications,
+)
+
+
+class UpdateCliTest(unittest.TestCase):
+    def test_date_prompts_explain_cumulative_change_spans(self) -> None:
+        indication = {
+            "indication": "Example indication",
+            "raw_biomarkers": "HER2-positive",
+        }
+        prompts = (
+            build_changelog_match_prompt(indication, "changelog"),
+            build_batch_changelog_match_prompt([indication], "changelog"),
+        )
+        for prompt in prompts:
+            self.assertIn("cumulative label history", prompt)
+            self.assertIn("only the passage changed", prompt)
+            self.assertIn("not evidence that it was absent", prompt)
+            self.assertIn("qualifier needed for the current target indication", prompt)
+
+    def test_revision_date_prompt_matches_identified_change_not_full_indication(self) -> None:
+        prompt = build_revision_changelog_match_prompt(
+            [{
+                "latest_indication": {"indication": "Latest indication"},
+                "reason": "Adult population was added.",
+                "label_changes": [{
+                    "baseline_text": "patients",
+                    "latest_text": "adult patients",
+                }],
+            }],
+            "event history",
+        )
+        self.assertIn("already-identified FDA indication revisions", prompt)
+        self.assertIn("do not independently reassess", prompt)
+        self.assertIn("adult patients", prompt)
+        self.assertIn("earliest changelog event", prompt)
+        self.assertIn("event pointer", prompt)
+
+    def test_only_curator_selected_revisions_are_prepared(self) -> None:
+        targets = {
+            "targets": [
+                {"latest_indication_index": 1},
+                {"latest_indication_index": 2},
+            ]
+        }
+        decisions = {
+            "indications": {
+                "1": {"revision": {"decision": "use_latest"}},
+                "2": {"revision": {"decision": "keep_existing"}},
+            }
+        }
+        self.assertEqual(
+            prepare_revision_reviews.selected_revision_indexes(targets, decisions), [1]
+        )
+
+    def test_unresolved_revision_screening_blocks_preparation(self) -> None:
+        targets = {"targets": [{"latest_indication_index": 1}]}
+        with self.assertRaisesRegex(ValueError, "remain unresolved"):
+            prepare_revision_reviews.selected_revision_indexes(targets, {"indications": {}})
+
+    def test_prepare_revision_reviews_runs_only_selected_indexes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            work_dir = Path(directory)
+            intermediate = work_dir / "intermediate"
+            review = work_dir / "review"
+            intermediate.mkdir()
+            review.mkdir()
+            (intermediate / "revision-targets.json").write_text(json.dumps({
+                "baseline_label_date": "2025-04-11",
+                "targets": [
+                    {"latest_indication_index": 1},
+                    {"latest_indication_index": 2},
+                ],
+            }))
+            (review / "decisions.json").write_text(json.dumps({
+                "schema_version": 1,
+                "document": {},
+                "indications": {
+                    "1": {"revision": {"decision": "use_latest", "source_sha256": {}}},
+                    "2": {"revision": {"decision": "keep_existing", "source_sha256": {}}},
+                },
+            }))
+            argv = ["prepare-revision-reviews", "--work-dir", str(work_dir)]
+            with patch("sys.argv", argv), patch.object(
+                prepare_revision_reviews.subprocess, "run"
+            ) as run:
+                self.assertEqual(prepare_revision_reviews.main(), 0)
+            command = run.call_args.args[0]
+            self.assertIn("--revision-baseline-date", command)
+            self.assertIn("2025-04-11", command)
+            self.assertEqual(command[-2:], ["--indication-index", "1"])
+            self.assertIn("--skip-indication-review", command)
+
+    def test_finds_persistent_event_number_in_filtered_changelog(self) -> None:
+        event = {
+            "event_number": 3,
+            "date": "2026-05-18",
+            "change_type": "replace",
+        }
+        self.assertEqual(event_by_number([event], 3), event)
+
+    def test_revision_date_events_are_strictly_after_baseline(self) -> None:
+        payload = {"events": [
+            {"event_number": 1, "date": "2025-01-01"},
+            {"event_number": 2, "date": "2025-04-11"},
+            {"event_number": 3, "date": "2026-01-01"},
+            {"event_number": 4, "date": "2026-09-01"},
+        ]}
+        result = prepare_approval.post_baseline_changelog(
+            payload, "2025-04-11", "2026-08-12"
+        )
+        self.assertEqual([event["event_number"] for event in result["events"]], [3])
+
+    def test_cli_lists_update_commands(self) -> None:
+        usage = cli.usage()
+        self.assertIn("check-setup", usage)
+        self.assertIn("check-curation-status", usage)
+        self.assertIn("reconcile-indications", usage)
+        self.assertIn("find-new-indications", usage)
+        self.assertIn("find-revised-indications", usage)
+        self.assertIn("prepare-revision-reviews", usage)
+        self.assertNotIn("record-revision-decision", usage)
+        self.assertIn("assemble-revisions", usage)
+        self.assertNotIn("check-curation-preflight", usage)
+        self.assertNotIn("prepare-update-indication-review", usage)
+        self.assertNotIn("prepare-label-history", usage)
+        self.assertNotIn("assess-revised-indications", usage)
+        self.assertNotIn("propose-revised-indications", usage)
+        self.assertNotIn("  doctor", usage)
+
+    def test_curation_status_writes_an_artifact(self) -> None:
+        result = {
+            "application_number": "BLA125554",
+            "previously_curated": True,
+            "newer_label_available": True,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "curation-status.json"
+            argv = [
+                "check-curation-status",
+                "--application-number", "BLA125554",
+                "--documents-json", str(root / "documents.json"),
+                "--output-json", str(output),
+            ]
+            with patch("sys.argv", argv), patch.object(
+                check_preflight, "check_curation_preflight", return_value=result
+            ):
+                self.assertEqual(check_preflight.main(), 0)
+            self.assertEqual(json.loads(output.read_text()), result)
+
+    def test_reconciliation_persists_new_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            existing_path = root / "existing.json"
+            latest_path = root / "latest.json"
+            output = root / "reconciliation.json"
+            existing_path.write_text(json.dumps([
+                {"id": "ind:1", "document_id": "doc:1", "indication": "Old"}
+            ]))
+            latest_path.write_text(json.dumps({"indications": [
+                {"indication": "New", "raw_biomarkers": "ALK"}
+            ]}))
+            mapped = {
+                "verified": True,
+                "verification_errors": [],
+                "mappings": [{
+                    "classification": "new",
+                    "latest_indication": {
+                        "latest_indication_index": 0,
+                        "indication": "New",
+                        "raw_biomarkers": "ALK",
+                    },
+                    "reason": "No counterpart.",
+                }],
+            }
+            argv = [
+                "reconcile-indications",
+                "--existing-indications-json", str(existing_path),
+                "--document-id", "doc:1",
+                "--latest-indications-json", str(latest_path),
+                "--output-json", str(output),
+            ]
+            with patch("sys.argv", argv), patch.object(
+                reconcile_indications,
+                "map_existing_to_latest_indications",
+                return_value=mapped,
+            ):
+                self.assertEqual(reconcile_indications.main(), 0)
+            artifact = json.loads(output.read_text())
+            self.assertEqual(
+                artifact["new_indication_candidates"][0]["indication"], "New"
+            )
+            self.assertTrue(artifact["biomarker_only"])
+
+    def test_prepare_label_history_prints_a_reusable_cache(self) -> None:
+        document = {
+            "id": "doc:fda.example",
+            "drug_name_brand": "Example",
+            "drug_name_generic": "examplemab",
+            "identification_number": 123456,
+            "urls": ["https://example.test/latest.pdf"],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            work_dir = Path(directory).resolve()
+            document_path = work_dir / "intermediate" / "document.proposal.json"
+            document_path.parent.mkdir(parents=True)
+            document_path.write_text(json.dumps(document))
+            cache_path = (
+                work_dir
+                / "intermediate"
+                / "section1-cache"
+                / "Example-nda123456-section1-cache.json"
+            )
+
+            def build(**_: object) -> tuple[Path, Path]:
+                cache_path.parent.mkdir(parents=True)
+                cache_path.write_text("{}")
+                changelog_dir = work_dir / "intermediate" / "section1-changelogs"
+                changelog_dir.mkdir(parents=True)
+                markdown = changelog_dir / "Example-nda123456-section1-changelog.md"
+                payload = changelog_dir / "Example-nda123456-section1-changelog.json"
+                markdown.write_text("history")
+                payload.write_text("{}")
+                return markdown, payload
+
+            argv = ["prepare-label-history", "--work-dir", str(work_dir)]
+            with patch("sys.argv", argv), patch.object(
+                prepare_label_history,
+                "resolve_document_application_number",
+                return_value="NDA123456",
+            ), patch.object(prepare_label_history, "build_changelog", side_effect=build):
+                self.assertEqual(prepare_label_history.main(), 0)
+            self.assertTrue(cache_path.is_file())
+
+            with patch("sys.argv", argv), patch.object(
+                prepare_label_history,
+                "resolve_document_application_number",
+                return_value="NDA123456",
+            ), patch.object(prepare_label_history, "build_changelog") as build_again:
+                self.assertEqual(prepare_label_history.main(), 0)
+            build_again.assert_not_called()
+
+    def test_not_found_review_contains_existing_record_and_label_links(self) -> None:
+        preflight = {
+            "application_number": "BLA125554",
+            "curated_label_date": "2025-04-11",
+            "curated_label_url": "https://example.test/curated.pdf",
+            "latest_label_date": "2026-08-12",
+        }
+        mapping = {
+            "classification": "not_found",
+            "existing_indication_id": "ind:fda.opdivo:1",
+            "existing_indication": {
+                "id": "ind:fda.opdivo:1",
+                "indication": "Existing indication",
+                "description": "Existing description",
+                "initial_approval_date": "2021-01-01",
+                "initial_approval_url": "https://example.test/initial.pdf",
+            },
+            "reason": "No latest counterpart.",
+        }
+        markdown = prepare_update_indications.match_review_markdown(
+            preflight,
+            mapping,
+            reconciliation_path=Path("/tmp/reconciliation.json"),
+            latest_indications_path=Path("/tmp/latest.json"),
+            label_markdown_path=Path("/tmp/latest-label.md"),
+            curated_label_pdf_path=Path("/tmp/curated-label.pdf"),
+            initial_label_pdf_path=Path("/tmp/initial-label.pdf"),
+        )
+        self.assertIn("Existing indication not found", markdown)
+        self.assertIn("Existing indication", markdown)
+        self.assertIn("Existing description", markdown)
+        self.assertIn("does not establish that FDA removed", markdown)
+        self.assertIn("## Review these", markdown)
+        self.assertIn("## More evidence", markdown)
+        self.assertIn("[Initial approval label — 2021-01-01]", markdown)
+        self.assertIn("[Previous curated label — 2025-04-11]", markdown)
+        self.assertIn("[Latest label — 2026-08-12]", markdown)
+        self.assertNotIn("[Latest-label PDF]", markdown)
+        self.assertIn("(</tmp/curated-label.pdf>)", markdown)
+        self.assertIn("(</tmp/initial-label.pdf>)", markdown)
+        self.assertNotIn("example.test/curated.pdf>)", markdown)
+        self.assertLess(
+            markdown.index("[Previous curated label"),
+            markdown.index("[Initial approval label"),
+        )
+
+    def test_combined_update_command_writes_review(self) -> None:
+        document = {
+            "id": "doc:fda.opdivo",
+            "type": "Document",
+            "drug_name_brand": "Opdivo",
+            "drug_name_generic": "nivolumab",
+            "identification_number": 125554,
+            "publication_date": "2026-08-12",
+            "urls": ["https://example.test/latest.pdf"],
+        }
+        preflight = {
+            "application_number": "BLA125554",
+            "previously_curated": True,
+            "newer_label_available": True,
+            "document_id": "doc:fda.opdivo",
+            "curated_label_date": "2025-04-11",
+            "curated_label_url": "https://example.test/curated.pdf",
+            "latest_label_date": "2026-08-12",
+            "latest_label_url": "https://example.test/latest.pdf",
+        }
+        reconciliation = {
+            "verified": True,
+            "verification_errors": [],
+            "mappings": [{
+                "classification": "new",
+                "existing_indication_id": None,
+                "latest_indication_index": 0,
+                "reason": "No counterpart.",
+                "existing_indication": None,
+                "latest_indication": {
+                    "latest_indication_index": 0,
+                    "indication": "New indication",
+                    "raw_biomarkers": "ALK",
+                },
+            }],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            database = root / "moalmanac-db" / "referenced"
+            database.mkdir(parents=True)
+            (database / "documents.json").write_text("[]")
+            (database / "indications.json").write_text(json.dumps([
+                {
+                    "id": "ind:1",
+                    "document_id": "doc:fda.opdivo",
+                    "indication": "Existing",
+                }
+            ]))
+            (database / "urls.json").write_text("[]")
+            work_dir = root / "run"
+
+            def extract(command: list[str], check: bool) -> None:
+                self.assertTrue(check)
+                output = (
+                    work_dir
+                    / "intermediate"
+                    / "Opdivo-BLA125554-claude_chunked_indication_fields.json"
+                )
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(json.dumps({"indications": [{
+                    "indication": "New indication",
+                    "raw_biomarkers": "ALK",
+                }]}))
+
+            argv = [
+                "find-new-indications",
+                "--application-number", "BLA125554",
+                "--database-dir", str(root / "moalmanac-db"),
+                "--work-dir", str(work_dir),
+            ]
+            with patch("sys.argv", argv), patch.object(
+                prepare_update_indications,
+                "check_curation_preflight",
+                return_value=preflight,
+            ), patch.object(
+                prepare_update_indications, "curate_document", return_value=document
+            ), patch.object(
+                prepare_update_indications.subprocess, "run", side_effect=extract
+            ), patch.object(
+                prepare_update_indications,
+                "map_existing_to_latest_indications",
+                return_value=reconciliation,
+            ), patch.object(
+                prepare_update_indications,
+                "download_pdf_bytes",
+                return_value=b"%PDF fake curated label",
+            ):
+                self.assertEqual(prepare_update_indications.main(), 0)
+
+            review_dir = work_dir / "review" / "indication-matches"
+            self.assertFalse(review_dir.exists())
+            reconciliation_path = (
+                work_dir / "intermediate" / "indication-matches.json"
+            )
+            self.assertTrue(reconciliation_path.is_file())
+
+    def test_combined_update_command_writes_review_for_unresolved_matches(self) -> None:
+        preflight = {
+            "application_number": "BLA125554",
+            "curated_label_date": "2025-04-11",
+            "curated_label_url": "https://example.test/curated.pdf",
+            "latest_label_date": "2026-08-12",
+        }
+        mapping = {
+            "classification": "uncertain",
+            "existing_indication": {
+                "indication": "Existing indication",
+                "initial_approval_date": "2025-04-11",
+                "initial_approval_url": "https://example.test/curated.pdf",
+                "raw_biomarkers": "HER2-positive",
+                "raw_cancer_type": "breast cancer",
+                "raw_therapeutics": "Example drug",
+            },
+            "latest_indication": {
+                "indication": "Possible counterpart",
+                "raw_biomarkers": "HER2 positive",
+                "raw_cancer_type": "metastatic breast cancer",
+                "raw_therapeutics": "Example drug with chemotherapy",
+            },
+            "reason": "Possible split.",
+        }
+        markdown = prepare_update_indications.match_review_markdown(
+            preflight,
+            mapping,
+            reconciliation_path=Path("/tmp/reconciliation.json"),
+            latest_indications_path=Path("/tmp/latest.json"),
+            label_markdown_path=Path("/tmp/latest-label.md"),
+            curated_label_pdf_path=Path("/tmp/curated-label.pdf"),
+            initial_label_pdf_path=Path("/tmp/curated-label.pdf"),
+        )
+        self.assertIn("Existing indication", markdown)
+        self.assertIn("Possible counterpart", markdown)
+        self.assertIn("Possible split", markdown)
+        self.assertIn("## Structured comparison", markdown)
+        self.assertIn("HER2-positive", markdown)
+        self.assertIn("metastatic breast cancer", markdown)
+        self.assertNotIn("[Initial approval label", markdown)
+
+    def test_new_indication_summary_separates_findings_from_curation_candidates(self) -> None:
+        mappings = [
+            {
+                "latest_indication": {
+                    "latest_indication_index": 1,
+                    "review_label": "ALK-positive lung cancer",
+                    "indication": "Drug for ALK-positive lung cancer",
+                    "raw_biomarkers": "ALK",
+                }
+            },
+            {
+                "latest_indication": {
+                    "latest_indication_index": 2,
+                    "review_label": "Advanced RCC",
+                    "indication": "Drug for advanced RCC",
+                    "raw_biomarkers": None,
+                }
+            },
+        ]
+        candidates = [{"latest_indication_index": 1}]
+        output = StringIO()
+        with redirect_stdout(output):
+            prepare_update_indications.print_new_indication_summary(
+                mappings, candidates
+            )
+        summary = output.getvalue()
+        self.assertIn(
+            "New indication 1: ALK-positive lung cancer | Biomarker: ALK | curation candidate",
+            summary,
+        )
+        self.assertIn(
+            "New indication 2: Advanced RCC | Biomarker: none | outside biomarker scope",
+            summary,
+        )
+        self.assertIn("New indications eligible for curation: 1", summary)
+        self.assertIn("New indication indexes: 1", summary)
+
+    def test_new_indication_review_shows_indication_biomarker_and_sources(self) -> None:
+        mappings = [{
+            "latest_indication": {
+                "latest_indication_index": 2,
+                "review_label": "Advanced RCC",
+                "indication": "AFINITOR is indicated for advanced RCC.",
+                "raw_biomarkers": None,
+                "source_chunk_index": 4,
+            },
+            "reason": "No existing counterpart.",
+        }]
+        markdown = prepare_update_indications.new_indication_review_markdown(
+            {
+                "application_number": "NDA022334",
+                "curated_label_date": "2022-02-01",
+                "latest_label_date": "2026-06-01",
+            },
+            mappings,
+            [],
+            label_markdown_path=Path("/tmp/label.md"),
+            curated_label_pdf_path=Path("/tmp/curated-label.pdf"),
+            reconciliation_path=Path("/tmp/reconciliation.json"),
+        )
+        self.assertIn("## 2 — Advanced RCC", markdown)
+        self.assertIn("- Biomarker: none", markdown)
+        self.assertIn("> AFINITOR is indicated for advanced RCC.", markdown)
+        self.assertIn("[Previous curated label — 2022-02-01]", markdown)
+        self.assertIn("[Latest label — 2026-06-01](</tmp/label.md>)", markdown)
+        self.assertIn("[Indication matching details]", markdown)
+        self.assertNotIn("Source chunk", markdown)
+        self.assertNotIn("Match assessment", markdown)
+
+    def test_find_revised_indications_owns_history_and_revision_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            work_dir = root / "run"
+            intermediate = work_dir / "intermediate"
+            intermediate.mkdir(parents=True)
+            status = {
+                "previously_curated": True,
+                "newer_label_available": True,
+                "document_id": "doc:fda.example",
+                "curated_label_url": "https://example.test/old.pdf",
+                "latest_label_url": "https://example.test/new.pdf",
+                "curated_label_date": "2025-04-11",
+                "latest_label_date": "2026-08-12",
+            }
+            (intermediate / "curation-status.json").write_text(json.dumps(status))
+            database = root / "moalmanac-db" / "referenced"
+            database.mkdir(parents=True)
+            indications = database / "indications.json"
+            indications.write_text("[]")
+            (intermediate / "revision-assessment.json").write_text(json.dumps({
+                "verified": True,
+                "assessments": [{
+                    "existing_indication_id": "ind:fda.example:0",
+                    "status": "revised",
+                    "existing_indication": {
+                        "id": "ind:fda.example:0",
+                        "document_id": "doc:fda.example",
+                        "indication": "Old wording",
+                    },
+                    "relevant_hunk_ids": ["hunk-1"],
+                    "relevant_hunks": [{
+                        "hunk_id": "hunk-1",
+                        "baseline_text": "Old wording",
+                        "latest_text": "New wording",
+                    }],
+                    "reason": "Latest label changed the indication.",
+                }],
+            }))
+            (intermediate / "indication-matches.json").write_text(json.dumps({
+                "mappings": [{
+                    "existing_indication_id": "ind:fda.example:0",
+                    "latest_indication_index": 2,
+                    "classification": "matched",
+                    "latest_indication": {
+                        "review_label": "Example cancer",
+                        "indication": "New wording",
+                    },
+                }],
+            }))
+            (intermediate / "Example-claude_chunked_indication_fields.json").write_text("{}")
+            labels = work_dir / "labels"
+            labels.mkdir()
+            (labels / "Example.pdf").write_text("pdf")
+            (labels / "Example.md").write_text("label")
+            history = prepare_label_history.LabelHistoryPaths(
+                intermediate / "history.json",
+                intermediate / "cache.json",
+            )
+            argv = [
+                "find-revised-indications",
+                "--database-dir", str(root / "moalmanac-db"),
+                "--work-dir", str(work_dir),
+            ]
+            with patch("sys.argv", argv), patch.object(
+                find_revised_indications,
+                "prepare_label_history",
+                return_value=history,
+            ) as prepare_history, patch.object(
+                find_revised_indications.subprocess, "run"
+            ) as prepare_reviews:
+                self.assertEqual(find_revised_indications.main(), 0)
+            prepare_history.assert_called_once_with(
+                work_dir,
+                overwrite=False,
+                baseline_label_url="https://example.test/old.pdf",
+            )
+            command = prepare_reviews.call_args.args[0]
+            self.assertIn("--stage", command)
+            self.assertIn("revision", command)
+            self.assertIn("--revision-targets-json", command)
+            self.assertIn("--revision-assessment-json", command)
+            self.assertIn("2", command)
+            targets = json.loads((intermediate / "revision-targets.json").read_text())
+            self.assertEqual(targets["targets"][0]["existing_indication_id"], "ind:fda.example:0")
+            self.assertEqual(
+                targets["targets"][0]["label_changes"][0]["hunk_id"], "hunk-1"
+            )
+
+    def test_commands_refuse_to_replace_artifacts_without_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "existing.json"
+            output.write_text("{}")
+            argv = [
+                "reconcile-indications",
+                "--existing-indications-json", str(root / "unused.json"),
+                "--document-id", "doc:1",
+                "--latest-indications-json", str(root / "unused-latest.json"),
+                "--output-json", str(output),
+            ]
+            with patch("sys.argv", argv):
+                with self.assertRaisesRegex(FileExistsError, "already exists"):
+                    reconcile_indications.main()
+
+
+if __name__ == "__main__":
+    unittest.main()

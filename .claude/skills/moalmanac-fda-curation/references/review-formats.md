@@ -75,14 +75,33 @@ the proposal or source into chat.>
 5. Ask a question
 ```
 
+## Revision screening in chat
+
+Present each possible revision before preparing detailed curation reviews.
+
+```markdown
+[Open the possible revision](<absolute-path-to/review/revision-screening/<slug>.md>)
+
+**Harness assessment:** <Assess whether the displayed source change affects the existing
+MOAlmanac record without restating the evidence.>
+
+1. Use the latest-label proposal
+2. Edit the proposal, then use it
+3. Keep the existing record unchanged
+4. Leave unresolved
+5. Ask a question
+```
+
 ## Description review in chat
 
 ```markdown
 [Open the description review](<absolute-path-to-review/indications/<slug>/description.md>)
 
-**Harness assessment:** <Comment only on detail added from Clinical Studies or Clinical
-Pharmacology: whether it genuinely clarifies the indication and whether the cited source
-supports it. Do not assess other editorial wording differences.>
+**Harness assessment:** <First state whether detail added from Clinical Studies or
+Clinical Pharmacology reduces ambiguity in the indication's patient population,
+biomarker, therapy, disease setting, or treatment context. Then state whether the cited
+source supports that detail. Recommend indication-only wording when the added information
+is accurate but does not make the indication meaningfully clearer.>
 
 1. Accept
 2. Edit
@@ -109,6 +128,63 @@ The approval file repeats the current curator-reviewed indication before the dat
 evidence so the curator can judge clinical equivalence without changing context. Its
 before/after evidence is copied directly from the selected changelog event, and it links
 to that numbered event in the full local changelog.
+
+For a revised indication, the same file is titled as a label date and URL review. Assess
+two questions separately: whether the selected event is the earliest post-baseline label
+that supports the revised wording, and whether the wording change is meaningful enough
+to replace the existing MOAlmanac date and URL. The curator may keep the existing date
+and URL when the newer wording does not warrant changing the record's approval
+provenance. Present these options:
+
+1. Use the proposed label date and URL
+2. Keep the existing MOAlmanac date and URL
+3. Inspect earlier events
+4. Choose another event
+5. Leave unresolved
+6. Ask a question
+
+When the curator keeps the existing values, let the tool retrieve them from the existing
+MOAlmanac record:
+
+```bash
+moalmanac-fda-curation record-decision \
+  --work-dir RUN_DIR \
+  --stage approval \
+  --indication-index INDEX \
+  --decision edited \
+  --keep-existing-field initial_approval_date \
+  --keep-existing-field initial_approval_url
+```
+
+## Indication mapping review in chat
+
+Present mapping reviews only for existing indications classified as `not_found` or
+`uncertain`, one at a time. The linked file owns the evidence; curator choices stay in
+chat.
+
+For `not_found`:
+
+```markdown
+[Open the indication mapping review](<absolute-path-to/review/indication-matches/not-found-*.md>)
+
+**Harness assessment:** <Assess whether the indication appears absent, was missed by
+extraction, or may correspond to differently worded current-label text.>
+
+Tell me whether you found a current-label counterpart, believe the indication is absent,
+want to inspect more evidence, or want to leave this unresolved.
+```
+
+For `uncertain`:
+
+```markdown
+[Open the indication mapping review](<absolute-path-to/review/indication-matches/uncertain-*.md>)
+
+**Harness assessment:** <Assess the proposed relationship without restating both
+records.>
+
+Tell me whether these are the same indication, whether another counterpart is a better
+match, whether this reflects a split or merge, or whether to leave it unresolved.
+```
 
 ## Confirm an edit
 

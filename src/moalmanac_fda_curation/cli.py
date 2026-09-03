@@ -5,15 +5,30 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 
+from dotenv import load_dotenv
+
 from . import doctor
-from .review import assembly, decisions
-from .workflows import extract_candidates, prepare_document, prepare_selected
+from .review import assembly, decisions, revision_assembly
+from .workflows import (
+    check_preflight,
+    extract_candidates,
+    find_revised_indications,
+    prepare_document,
+    prepare_selected,
+    prepare_revision_reviews,
+    prepare_update_indications,
+    reconcile_indications,
+)
 
 
 COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
-    "doctor": (
+    "check-setup": (
         "Check installation, API-key presence, FDA access, and output permissions",
         doctor.main,
+    ),
+    "check-curation-status": (
+        "Check whether an FDA application is curated and has a newer label",
+        check_preflight.main,
     ),
     "prepare-document-review": (
         "Prepare FDA document metadata and its curator review",
@@ -23,20 +38,39 @@ COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
         "Extract indication candidates and create their screening review",
         extract_candidates.main,
     ),
+    "reconcile-indications": (
+        "Map existing indications to the latest-label indication candidates",
+        reconcile_indications.main,
+    ),
+    "find-new-indications": (
+        "Compare a newer label with curated indications and identify new ones",
+        prepare_update_indications.main,
+    ),
+    "find-revised-indications": (
+        "Find curated indications that changed in a newer FDA label",
+        find_revised_indications.main,
+    ),
     "prepare-selected-review": (
         "Prepare descriptions, approval evidence, and review files for selected indications",
         prepare_selected.main,
     ),
+    "prepare-revision-reviews": (
+        "Prepare detailed reviews for revisions selected by the curator",
+        prepare_revision_reviews.main,
+    ),
     "record-decision": (
         "Record a curator decision and refresh its review file",
         decisions.main,
+    ),
+    "assemble-revisions": (
+        "Assemble curator-approved updates to existing indications",
+        revision_assembly.main,
     ),
     "assemble-reviewed": (
         "Apply explicit decisions and write reviewed document.json and indication.json",
         assembly.main,
     ),
 }
-
 
 def usage() -> str:
     lines = ["usage: moalmanac-fda-curation <command> [options]", "", "commands:"]
@@ -50,6 +84,7 @@ def usage() -> str:
 
 
 def main() -> int:
+    load_dotenv()
     if len(sys.argv) < 2 or sys.argv[1] in {"-h", "--help"}:
         print(usage())
         return 0
