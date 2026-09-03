@@ -48,7 +48,7 @@ def main() -> int:
     verify_decision_sources(decisions)
     indexes = selected_revision_indexes(targets, decisions)
     if not indexes:
-        print("No indications were selected for recuration.")
+        print("No existing indications were selected for updated-label review.")
         return 0
     command = [
         sys.executable,

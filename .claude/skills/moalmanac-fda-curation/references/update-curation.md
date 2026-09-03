@@ -29,7 +29,7 @@ Route from the command output:
 Do not ask the curator to review successful indication matches. Do not repeat document
 review or run new-entry assembly during an update session.
 
-## Recurate changed indications
+## Review changes to existing indications
 
 Tell the curator: “Now we'll see if any indications have changed in the newer label.”
 Then run:

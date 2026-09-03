@@ -1,11 +1,13 @@
 # MOAlmanac FDA Curation Assistant
 
-An agentic, human-in-the-loop workflow for evidence-backed FDA label curation for the
-[Molecular Oncology Almanac](https://moalmanac.org).
+This project helps curators add FDA-approved oncology indications to the
+[Molecular Oncology Almanac](https://moalmanac.org) and keep existing entries current
+when labels change.
 
-The pipeline retrieves label evidence and generates structured proposals. A reusable
-skill lets Claude or Codex guide the curator through source-linked review, edits,
-exclusions, and final assembly.
+Give it an FDA application number and it finds the relevant label, checks what
+MOAlmanac has already curated, and guides you through only the decisions that need human
+review. You can compare proposed entries with their FDA evidence, make corrections, and
+produce reviewed JSON ready for the database.
 
 ## Get started
 
@@ -29,61 +31,25 @@ source evidence, and ask questions without losing your place.
 
 ## Curate with Claude
 
-Open the cloned repository in the Claude desktop app's Code tab, then invoke the project
-skill:
+Open the repository in Claude's Code tab and run:
 
 ```text
 /moalmanac-fda-curation
 ```
 
-Provide an NDA or BLA application number when prompted. The skill selects the latest
-approved label, explains each phase, and links the generated review files. You can ask
-questions, inspect local source evidence, edit proposals, exclude indications, and accept
-the final reviewed output.
-
 ## Curate with ChatGPT
 
-Open the cloned repository in Codex in the ChatGPT desktop app and ask:
+Open the repository in Codex and ask:
 
 ```text
-Use the MOAlmanac FDA curation skill at
-.claude/skills/moalmanac-fda-curation/SKILL.md to curate a new FDA label.
+Use the MOAlmanac FDA curation skill in this repository.
 ```
 
-Then provide the NDA or BLA application number when prompted. The review workflow and
-outputs are the same in either harness.
+In either app, provide an NDA or BLA application number when prompted.
 
 To find the application number, search the drug or active ingredient in
 [Drugs@FDA](https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm). Open the product
 record and use its NDA or BLA number, for example `NDA208558` or `BLA761174`.
-
-First-time curation writes `reviewed/document.json` and `reviewed/indication.json`.
-Revision curation reuses the same field-level reviews, preserves existing indication
-IDs, and writes `reviewed/revised-indications.json`.
-
-For an application that MOAlmanac already curated and that has a newer approved label,
-the update workflow combines latest-label preparation, indication extraction, and
-reconciliation into one routing step:
-
-```shell
-moalmanac-fda-curation find-new-indications \
-  --application-number BLA125554 \
-  --database-dir /path/to/moalmanac-db \
-  --work-dir analyses/BLA125554
-```
-
-Successful matches are retained in JSON without requiring review. If any existing
-indication is not found or a mapping is uncertain, review the corresponding file in
-`review/indication-matches/` before continuing. Otherwise, curate any new
-indication indexes printed by the command and then proceed to revision analysis.
-
-Revision analysis uses `find-revised-indications`. It identifies changed matched
-indications and creates a short screening review for each one. Record whether to use
-the latest-label proposal, keep the existing record, or leave the choice unresolved.
-Then `prepare-revision-reviews` prepares description and label date and URL reviews only
-for indications moving to the latest-label proposal. `assemble-revisions`
-preserves existing IDs and writes the approved indication records together with
-targeted and fully materialized document and label-URL updates.
 
 ## Manual setup and troubleshooting
 
@@ -106,9 +72,8 @@ analyses/                     Revision notebook plus ignored local curation runs
 
 ## Current scope
 
-The primary reviewed workflow creates new entries from FDA labels. CLI analysis commands
-also check whether an application was previously curated, reconcile existing indications
-against a newer label, identify revised indications from deterministic source diffs, and
-propose minimal patches. These update commands do not yet record curator decisions or
-assemble reviewed database updates. The project does not write to `moalmanac-db`, commit,
-push, or open pull requests.
+The reviewed workflows create new entries from FDA labels and update existing entries
+when a newer label changes their indications. The CLI checks whether an application was
+previously curated, identifies new and changed indications, records explicit curator
+decisions, and assembles reviewed JSON artifacts for the affected MOAlmanac records. The
+project does not write directly to `moalmanac-db`, commit, push, or open pull requests.
