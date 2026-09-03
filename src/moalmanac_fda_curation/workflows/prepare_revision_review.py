@@ -227,7 +227,7 @@ def run(args: argparse.Namespace) -> int:
     intermediate = work_dir / "intermediate"
     assessment_path = intermediate / "revision-assessment.json"
     proposals_path = intermediate / "revision-proposals.json"
-    reconciliation_path = intermediate / "indication-reconciliation.json"
+    reconciliation_path = intermediate / "indication-matches.json"
     review_dir = work_dir / "review" / "revisions"
 
     if assessment_path.exists() and not args.overwrite:

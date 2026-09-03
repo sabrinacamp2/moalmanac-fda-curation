@@ -110,7 +110,7 @@ def assemble_revised_indications(
 def decision_sources(work_dir: Path) -> dict[str, str]:
     paths = [
         work_dir / "intermediate" / "revision-assessment.json",
-        work_dir / "intermediate" / "indication-reconciliation.json",
+        work_dir / "intermediate" / "indication-matches.json",
         work_dir / "intermediate" / "revision-proposals.json",
     ]
     return {str(path.resolve()): file_sha256(path.resolve()) for path in paths}

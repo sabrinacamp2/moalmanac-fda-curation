@@ -254,6 +254,7 @@ class UpdateCliTest(unittest.TestCase):
             "newer_label_available": True,
             "document_id": "doc:fda.opdivo",
             "curated_label_date": "2025-04-11",
+            "curated_label_url": "https://example.test/curated.pdf",
             "latest_label_date": "2026-08-12",
             "latest_label_url": "https://example.test/latest.pdf",
         }
@@ -319,13 +320,17 @@ class UpdateCliTest(unittest.TestCase):
                 prepare_update_indications,
                 "map_existing_to_latest_indications",
                 return_value=reconciliation,
+            ), patch.object(
+                prepare_update_indications,
+                "download_pdf_bytes",
+                return_value=b"%PDF fake curated label",
             ):
                 self.assertEqual(prepare_update_indications.main(), 0)
 
             review_dir = work_dir / "review" / "indication-matches"
             self.assertFalse(review_dir.exists())
             reconciliation_path = (
-                work_dir / "intermediate" / "indication-reconciliation.json"
+                work_dir / "intermediate" / "indication-matches.json"
             )
             self.assertTrue(reconciliation_path.is_file())
 
@@ -408,7 +413,7 @@ class UpdateCliTest(unittest.TestCase):
         self.assertIn("New indications eligible for curation: 1", summary)
         self.assertIn("New indication indexes: 1", summary)
 
-    def test_new_indication_review_shows_exact_text_biomarker_and_scope(self) -> None:
+    def test_new_indication_review_shows_indication_biomarker_and_sources(self) -> None:
         mappings = [{
             "latest_indication": {
                 "latest_indication_index": 2,
@@ -422,20 +427,23 @@ class UpdateCliTest(unittest.TestCase):
         markdown = prepare_update_indications.new_indication_review_markdown(
             {
                 "application_number": "NDA022334",
+                "curated_label_date": "2022-02-01",
                 "latest_label_date": "2026-06-01",
             },
             mappings,
             [],
             label_markdown_path=Path("/tmp/label.md"),
-            label_pdf_path=Path("/tmp/label.pdf"),
+            curated_label_pdf_path=Path("/tmp/curated-label.pdf"),
             reconciliation_path=Path("/tmp/reconciliation.json"),
-            latest_indications_path=Path("/tmp/indications.json"),
         )
         self.assertIn("## 2 — Advanced RCC", markdown)
         self.assertIn("- Biomarker: none", markdown)
-        self.assertIn("- Scope: outside biomarker scope", markdown)
         self.assertIn("> AFINITOR is indicated for advanced RCC.", markdown)
-        self.assertIn("[Latest FDA label Markdown](</tmp/label.md>)", markdown)
+        self.assertIn("[Previous curated label — 2022-02-01]", markdown)
+        self.assertIn("[Latest label — 2026-06-01](</tmp/label.md>)", markdown)
+        self.assertIn("[Indication matching details]", markdown)
+        self.assertNotIn("Source chunk", markdown)
+        self.assertNotIn("Match assessment", markdown)
 
     def test_find_revised_indications_owns_history_and_revision_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -588,7 +596,7 @@ class UpdateCliTest(unittest.TestCase):
                 "diff_hunks": revised["relevant_hunks"],
                 "assessments": [revised, unchanged],
             }))
-            (intermediate / "indication-reconciliation.json").write_text(json.dumps({
+            (intermediate / "indication-matches.json").write_text(json.dumps({
                 "mappings": [{
                     "existing_indication_id": "ind:revised",
                     "classification": "matched",

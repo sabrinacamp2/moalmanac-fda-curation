@@ -105,14 +105,10 @@ def new_indication_review_markdown(
     candidates: list[dict[str, Any]],
     *,
     label_markdown_path: Path,
-    label_pdf_path: Path,
+    curated_label_pdf_path: Path,
     reconciliation_path: Path,
-    latest_indications_path: Path,
 ) -> str:
     """Create a compact verification surface for unmatched label indications."""
-    candidate_indexes = {
-        candidate["latest_indication_index"] for candidate in candidates
-    }
     lines = [
         "# Newly identified label indications",
         "",
@@ -125,11 +121,6 @@ def new_indication_review_markdown(
         latest = mapping["latest_indication"]
         index = latest["latest_indication_index"]
         label = latest.get("review_label") or f"Indication {index}"
-        scope = (
-            "curation candidate"
-            if index in candidate_indexes
-            else "outside biomarker scope"
-        )
         indication = latest["indication"]
         lines.extend(
             [
@@ -137,11 +128,8 @@ def new_indication_review_markdown(
                 f"## {index} — {label}",
                 "",
                 f"- Biomarker: {latest.get('raw_biomarkers') or 'none'}",
-                f"- Scope: {scope}",
-                f"- Source chunk: {latest.get('source_chunk_index', 'not available')}",
-                f"- Match assessment: {mapping.get('reason') or 'Not provided'}",
                 "",
-                "### Exact extracted indication",
+                "### Indication",
                 "",
                 *(f"> {line}" for line in indication.splitlines()),
             ]
@@ -149,12 +137,11 @@ def new_indication_review_markdown(
     lines.extend(
         [
             "",
-            "## Sources and artifacts",
+            "## Review sources",
             "",
-            f"- [Latest FDA label Markdown](<{label_markdown_path}>)",
-            f"- [Latest FDA label PDF](<{label_pdf_path}>)",
-            f"- [Latest-label indication extraction](<{latest_indications_path}>)",
-            f"- [Reconciliation JSON](<{reconciliation_path}>)",
+            f"- [Previous curated label — {preflight['curated_label_date']}](<{curated_label_pdf_path}>)",
+            f"- [Latest label — {preflight['latest_label_date']}](<{label_markdown_path}>)",
+            f"- [Indication matching details](<{reconciliation_path}>)",
             "",
         ]
     )
@@ -297,7 +284,7 @@ def main() -> int:
     intermediate = work_dir / "intermediate"
     review_dir = work_dir / "review"
     preflight_path = intermediate / "curation-status.json"
-    reconciliation_path = intermediate / "indication-reconciliation.json"
+    reconciliation_path = intermediate / "indication-matches.json"
     match_review_dir = review_dir / "indication-matches"
     review_label_dir = work_dir / "labels" / "review-sources"
     new_review_path = review_dir / "new-indications.md"
@@ -391,9 +378,11 @@ def main() -> int:
     )
     groups = mapping_groups(reconciliation)
     exceptions = groups["not_found"] + groups["uncertain"]
-    if exceptions:
+    curated_label_pdf: Path | None = None
+    local_label_paths: dict[str, Path] = {}
+    if exceptions or groups["new"]:
         latest_label_pdf = work_dir / "labels" / f"{stem}.pdf"
-        local_label_paths: dict[str, Path] = {
+        local_label_paths = {
             preflight["latest_label_url"]: latest_label_pdf
         }
 
@@ -410,6 +399,8 @@ def main() -> int:
         curated_label_pdf = local_label(
             preflight["curated_label_url"], preflight["curated_label_date"]
         )
+    if exceptions:
+        assert curated_label_pdf is not None
         for position, mapping in enumerate(exceptions):
             existing_indication = mapping.get("existing_indication")
             initial_url = (
@@ -450,14 +441,14 @@ def main() -> int:
     else:
         print("All existing indications matched confidently.")
     if groups["new"]:
+        assert curated_label_pdf is not None
         new_review = new_indication_review_markdown(
             preflight,
             groups["new"],
             new_candidates,
             label_markdown_path=work_dir / "labels" / f"{stem}.md",
-            label_pdf_path=work_dir / "labels" / f"{stem}.pdf",
+            curated_label_pdf_path=curated_label_pdf,
             reconciliation_path=reconciliation_path,
-            latest_indications_path=latest_indications_path,
         )
         if new_review_path.exists() and not args.overwrite:
             if new_review_path.read_text(encoding="utf-8") != new_review:

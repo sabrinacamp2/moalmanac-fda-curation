@@ -53,7 +53,7 @@ def main() -> int:
     result["document_id"] = args.document_id
     result["biomarker_only"] = not args.include_non_biomarker
     write_json_atomic(output_path, result)
-    print(f"Indication reconciliation: {output_path}")
+    print(f"Indication matches: {output_path}")
     print(f"Verified: {result['verified']}")
     return 0 if result["verified"] else 1
 
