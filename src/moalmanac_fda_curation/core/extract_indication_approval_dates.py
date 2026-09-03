@@ -135,7 +135,32 @@ def extract_indications_section_fallback(label_markdown: str) -> str:
                 )
             )
             if not numbered_headings:
-                raise
+                # Labels that predate the modern numbered prescribing-information
+                # format can begin directly with a legacy INDICATIONS AND USAGE
+                # heading and end at CONTRAINDICATIONS or another major heading.
+                legacy_headings = list(
+                    re.finditer(
+                        r"(?m)^\s*(?:\d+\s+)?INDICATIONS AND USAGE\s*$",
+                        label_markdown,
+                    )
+                )
+                if not legacy_headings:
+                    raise
+                legacy_text = label_markdown[legacy_headings[-1].end() :]
+                legacy_end = re.search(
+                    r"(?m)^\s*(?:\d+\s+)?(?:CONTRAINDICATIONS|WARNINGS|"
+                    r"PRECAUTIONS|ADVERSE REACTIONS|DOSAGE AND ADMINISTRATION|"
+                    r"HOW SUPPLIED)\s*$",
+                    legacy_text,
+                )
+                if not legacy_end:
+                    raise
+                legacy_lines = []
+                for line in legacy_text[: legacy_end.start()].splitlines():
+                    if re.fullmatch(r"\s*\d+\s*", line):
+                        continue
+                    legacy_lines.append(re.sub(r"^\s*\d+\s+", "", line))
+                return "\n".join(legacy_lines).strip()
             numbered_heading = numbered_headings[-1]
             numbered_text = label_markdown[numbered_heading.end() :]
             full_prescribing_text = "\n".join(

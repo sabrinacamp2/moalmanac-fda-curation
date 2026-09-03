@@ -7,6 +7,9 @@ from moalmanac_fda_curation.core.extract_indications_from_fda_label import (
     extract_highlights_drug_class,
     extract_section,
 )
+from moalmanac_fda_curation.core.extract_indication_approval_dates import (
+    extract_indications_section_fallback,
+)
 
 
 class IndicationPromptTest(unittest.TestCase):
@@ -71,6 +74,23 @@ class ExtractSectionTest(unittest.TestCase):
         self.assertEqual(
             extract_section(text, "1 INDICATIONS AND USAGE", "2 DOSAGE AND ADMINISTRATION"),
             "EXAMPLE text.",
+        )
+
+    def test_extracts_legacy_label_without_full_prescribing_heading(self) -> None:
+        text = (
+            "130 CLINICAL STUDIES\n"
+            "141 INDICATIONS AND USAGE\n"
+            "142 Example is indicated for biomarker-positive cancer.\n"
+            "143\n"
+            "144 Additional indication detail.\n"
+            "151 CONTRAINDICATIONS\n"
+            "152 None known.\n"
+        )
+
+        self.assertEqual(
+            extract_indications_section_fallback(text),
+            "Example is indicated for biomarker-positive cancer.\n"
+            "Additional indication detail.",
         )
 
 
