@@ -121,7 +121,7 @@ or cannot be matched confidently, the command writes one evidence file per mappi
 curate any printed new-indication indexes, or proceed directly to revision analysis when
 there are none.
 
-Find revisions and create reviews for flagged indications in one command:
+Find changed indications and prepare their standard curation reviews in one command:
 
 ```bash
 moalmanac-fda-curation find-revised-indications \
@@ -129,9 +129,9 @@ moalmanac-fda-curation find-revised-indications \
   --work-dir RUN_DIR
 ```
 
-The command prints one Markdown path per flagged revision. Link those review files one
-at a time. Its JSON artifacts remain under `intermediate/`; do not present them unless
-requested.
+The command prints the latest-label indexes prepared for review. Review each through its
+indication, description, and current-form date files, one stage at a time. Its JSON
+artifacts remain under `intermediate/`; do not present them unless requested.
 
 The tool chooses stable filenames:
 
@@ -170,18 +170,6 @@ Never run this command before the curator states the decision. It locates and ha
 stage's source artifacts, records the decision, and rebuilds the affected review file.
 Reviewed assembly fails if a source artifact later changes.
 
-For a flagged revision, record the curator's explicit outcome by stable indication ID:
-
-```bash
-moalmanac-fda-curation record-revision-decision \
-  --work-dir RUN_DIR \
-  --indication-id ind:fda.example:0 \
-  --decision accepted
-```
-
-Revision decisions are `accepted`, `edited`, `no-change`, or `unresolved`. Use `edited`
-with complete replacement values only for fields the curator changes from the proposal.
-
 ## Assemble reviewed outputs
 
 ```bash
@@ -199,8 +187,9 @@ For an update session, assemble resolved revisions separately:
 moalmanac-fda-curation assemble-revisions --work-dir RUN_DIR
 ```
 
-This writes `reviewed/revised-indications.json` from explicit revision decisions and
-refuses stale or unresolved review state.
+This preserves existing indication IDs, writes `reviewed/revised-indications.json` from
+the standard stage decisions, and creates old-versus-new Markdown files under
+`review/revision-comparisons/`. It refuses stale or unresolved review state.
 
 After recording an edit, show only the resolved edited field/value from the rebuilt
 review packet in chat and obtain confirmation before continuing.

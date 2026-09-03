@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dotenv import load_dotenv
 
 from . import doctor
-from .review import assembly, decisions, revision_decisions
+from .review import assembly, decisions, revision_assembly
 from .workflows import (
     check_preflight,
     extract_candidates,
@@ -57,13 +57,9 @@ COMMANDS: dict[str, tuple[str, Callable[[], int]]] = {
         "Record a curator decision and refresh its review file",
         decisions.main,
     ),
-    "record-revision-decision": (
-        "Record explicit field edits for one revised indication",
-        revision_decisions.record_main,
-    ),
     "assemble-revisions": (
-        "Assemble complete revised indications from curator decisions",
-        revision_decisions.assemble_main,
+        "Assemble updated indications and compare them with existing records",
+        revision_assembly.main,
     ),
     "assemble-reviewed": (
         "Apply explicit decisions and write reviewed document.json and indication.json",

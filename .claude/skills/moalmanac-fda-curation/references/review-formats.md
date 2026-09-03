@@ -110,25 +110,24 @@ evidence so the curator can judge clinical equivalence without changing context.
 before/after evidence is copied directly from the selected changelog event, and it links
 to that numbered event in the full local changelog.
 
-## Revision review in chat
+For a revised indication, the same file is titled as a current-form date review. Assess
+whether the selected event is the earliest post-baseline label that supports the revised
+form; the file displays the previous curated label date for that comparison.
 
-Only indications classified as revised receive a Markdown review. Do not list unchanged
-indications unless the curator asks for the audit result.
+## Final revision comparison in chat
+
+After the three standard review stages are complete, present the deterministic
+comparison for one newly curated indication at a time.
 
 ```markdown
-[Open the flagged revision](<absolute-path-to-review/revisions/<indication-id>.md>)
+[Open the existing-versus-newly-curated comparison](<absolute-path-to-review/revision-comparisons/<indication-id>.md>)
 
-**Harness assessment:** <Assess whether the proposal is supported by the linked
-source artifacts.>
+**Harness assessment:** <Call attention only to a potentially important omission or an
+unsupported addition.>
 
-1. Accept
-2. Specify field edits
-3. Record that no MOAlmanac field should change
-4. Inspect or question the proposal
-5. Mark unresolved
+Tell me whether anything important was missed or removed. If so, we can return to the
+affected review stage and edit it.
 ```
-
-Present the generated revision review files one at a time.
 
 ## Indication mapping review in chat
 

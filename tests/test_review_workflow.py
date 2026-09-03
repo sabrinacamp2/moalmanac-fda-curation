@@ -228,6 +228,21 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.assertIn("[selected changelog event](</tmp/changelog.md#event-1>)", markdown)
         self.assertNotIn("Label URL:", markdown)
 
+    def test_revision_date_review_explains_current_form_and_baseline(self) -> None:
+        packet = build_stage_packet(
+            "approval",
+            self.document,
+            self.indications,
+            indication_index=0,
+            date_matches=self.dates,
+            revision_baseline_date="2025-04-11",
+        )
+        markdown = approval_markdown(packet)
+        self.assertIn("current-form date review", markdown)
+        self.assertIn("Proposed date current revised form first appeared", markdown)
+        self.assertIn("Previous curated label date: 2025-04-11", markdown)
+        self.assertNotIn("initial approval review", markdown)
+
     def test_virtual_environment_status(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = Path(temp_dir)
@@ -300,6 +315,37 @@ class ReviewWorkflowTest(unittest.TestCase):
             )
             self.assertIn("--changelog-markdown", arguments)
             self.assertIn(str(labels / "Example-NDA123.pdf"), arguments)
+
+    def test_revision_approval_decision_reuses_revision_date_evidence(self) -> None:
+        from moalmanac_fda_curation.review.decisions import review_inputs
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir)
+            intermediate = work_dir / "intermediate"
+            labels = work_dir / "labels"
+            changelogs = intermediate / "section1-changelogs"
+            for directory in (intermediate, labels, changelogs):
+                directory.mkdir(parents=True, exist_ok=True)
+            for path in (
+                intermediate / "document.proposal.json",
+                intermediate / "Example-NDA123-claude_chunked_indication_fields.json",
+                intermediate / "selected-revision-date-evidence.json",
+                labels / "Example-NDA123.pdf",
+                labels / "Example-NDA123.md",
+                changelogs / "Example-nda123-section1-changelog.md",
+            ):
+                path.touch()
+            (intermediate / "revision-targets.json").write_text(json.dumps({
+                "baseline_label_date": "2025-04-11",
+                "targets": [{"latest_indication_index": 2}],
+            }))
+
+            sources, arguments = review_inputs(work_dir, "approval", 2)
+            self.assertIn(
+                intermediate / "selected-revision-date-evidence.json", sources
+            )
+            self.assertIn("--revision-baseline-date", arguments)
+            self.assertIn("2025-04-11", arguments)
 
     def test_candidate_wrapper_runs_extraction_then_review_generation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

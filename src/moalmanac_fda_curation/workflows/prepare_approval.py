@@ -27,6 +27,22 @@ from ..core.artifacts import (
 )
 
 
+def post_baseline_changelog(
+    payload: dict, baseline_date: str, latest_date: str
+) -> dict:
+    """Return only selectable events for the current revised indication form."""
+    events = [
+        event
+        for event in payload["events"]
+        if baseline_date < event.get("date", "") <= latest_date
+    ]
+    if not events:
+        raise ValueError(
+            "No changelog events fall after the curated label through the latest label"
+        )
+    return {**payload, "events": events}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--document-json", type=Path, required=True)
@@ -36,6 +52,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--indication-index", type=int, action="append")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
+    parser.add_argument(
+        "--revision-baseline-date",
+        help="Use only changelog events after this previously curated label date.",
+    )
     parser.add_argument(
         "--overwrite",
         action="store_true",
@@ -90,6 +110,12 @@ def main() -> int:
         )
 
     changelog_payload = load_changelog_payload(changelog_json)
+    if args.revision_baseline_date:
+        changelog_payload = post_baseline_changelog(
+            changelog_payload,
+            args.revision_baseline_date,
+            document["publication_date"],
+        )
     indexes = selected_indication_indexes(
         indications["indications"], args.indication_index
     )

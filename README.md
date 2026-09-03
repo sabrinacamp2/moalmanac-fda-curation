@@ -58,9 +58,8 @@ To find the application number, search the drug or active ingredient in
 record and use its NDA or BLA number, for example `NDA208558` or `BLA761174`.
 
 First-time curation writes `reviewed/document.json` and `reviewed/indication.json`.
-Revision review writes complete structured proposals with deterministic field diffs;
-explicit curator accept/edit decisions are tracked separately and assembled into
-`reviewed/revised-indications.json`.
+Revision curation reuses the same field-level reviews, preserves existing indication
+IDs, and writes `reviewed/revised-indications.json` with deterministic comparisons.
 
 For an application that MOAlmanac already curated and that has a newer approved label,
 the update workflow combines latest-label preparation, indication extraction, and
@@ -78,14 +77,11 @@ indication is not found or a mapping is uncertain, review the corresponding file
 `review/indication-matches/` before continuing. Otherwise, curate any new
 indication indexes printed by the command and then proceed to revision analysis.
 
-Revision analysis uses `find-revised-indications`. It builds or reuses the required
-label history in the background and creates Markdown only for indications flagged as
-revised. Each review shows
-the exact removed and added words, the complete changed label passage, and proposed field changes;
-unchanged indications are omitted from curator-facing review. The existing historical
-event matcher runs on the bounded baseline-to-latest changelog and uses a verified later
-event to populate `initial_approval_date` and `initial_approval_url` in a full proposed
-indication record.
+Revision analysis uses `find-revised-indications`. It identifies changed matched
+indications and prepares the standard indication, description, and current-form date
+reviews for their latest-label counterparts. `assemble-revisions` preserves existing
+indication IDs and creates compact deterministic old-versus-new comparisons alongside
+the revised records.
 
 ## Manual setup and troubleshooting
 

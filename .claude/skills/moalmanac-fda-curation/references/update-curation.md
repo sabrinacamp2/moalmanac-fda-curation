@@ -29,7 +29,7 @@ Route from the command output:
 Do not ask the curator to review successful indication matches. Do not repeat document
 review or run new-entry assembly during an update session.
 
-## Review flagged revisions
+## Recurate changed indications
 
 Tell the curator: “Now we'll see if any indications have changed in the newer label.”
 Then run:
@@ -46,13 +46,16 @@ complete the assessment.
 
 Route from the command output:
 
-- If it reports no flagged revisions, tell the curator and stop.
-- Link only the Markdown files printed for flagged revisions, one at a time.
+- If it reports no changed matched indications, tell the curator and stop.
+- For each reported index, use the indication, description, and current-form date review
+  steps in [new-curation.md#review-vertically](new-curation.md#review-vertically).
+  Present one indication and one stage at a time, recording each explicit decision with
+  `record-decision`.
+- For a changed existing indication, offer accept, edit, inspect, question, or unresolved
+  outcomes. Keep the indication in the revision set while its mapping remains valid.
 - Do not present unchanged indications unless the curator asks.
 
-An optional harness assessment may comment on whether the proposal appears supported by
-the review file. Record only the curator's explicit decision. Use `accepted` to retain
-the complete proposal, or `edited` with complete replacement values for curator-changed
-fields. Use `no-change` when the label changed but no MOAlmanac field should change, and
-`unresolved` when review must be deferred. After every flagged revision is resolved, run
-`assemble-revisions`.
+After all three stages are resolved for every changed indication, run
+`assemble-revisions`. Present its comparison Markdown files one at a time and ask whether
+the newly curated record omitted anything important or introduced anything unsupported. If
+a correction is needed, edit the relevant stage decision and reassemble.

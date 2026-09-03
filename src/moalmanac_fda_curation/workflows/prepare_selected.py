@@ -19,6 +19,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
     parser.add_argument(
+        "--revision-baseline-date",
+        help="Limit date matching to labels after this previously curated label date.",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Regenerate existing extraction outputs; requires explicit curator approval.",
@@ -52,8 +56,16 @@ def main() -> int:
     label_markdown = one_file(work_dir / "labels", "*.md", "current label Markdown")
     label_pdf = one_file(work_dir / "labels", "*.pdf", "current label PDF")
     intermediate = work_dir / "intermediate"
-    descriptions = intermediate / "selected-description-proposals.json"
-    approvals = intermediate / "selected-approval-evidence.json"
+    descriptions = intermediate / (
+        "selected-revision-description-proposals.json"
+        if args.revision_baseline_date
+        else "selected-description-proposals.json"
+    )
+    approvals = intermediate / (
+        "selected-revision-date-evidence.json"
+        if args.revision_baseline_date
+        else "selected-approval-evidence.json"
+    )
     changelog_stem = output_stem(
         document_payload["drug_name_brand"],
         resolve_document_application_number(document_payload),
@@ -114,6 +126,10 @@ def main() -> int:
     ]
     if args.overwrite:
         approval_command.append("--overwrite")
+    if args.revision_baseline_date:
+        approval_command.extend(
+            ("--revision-baseline-date", args.revision_baseline_date)
+        )
     run(approval_command)
 
     for index in indexes:
@@ -138,6 +154,10 @@ def main() -> int:
             if stage == "approval":
                 command.extend(("--date-matches-json", str(approvals)))
                 command.extend(("--changelog-markdown", str(changelog_markdown)))
+                if args.revision_baseline_date:
+                    command.extend(
+                        ("--revision-baseline-date", args.revision_baseline_date)
+                    )
             if decisions.exists():
                 command.extend(("--decisions-json", str(decisions)))
             command.extend(("--label-pdf", str(label_pdf)))

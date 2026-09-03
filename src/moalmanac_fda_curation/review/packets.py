@@ -97,6 +97,7 @@ def build_stage_packet(
     date_matches: list[dict[str, Any]] | None = None,
     decisions: dict[str, Any] | None = None,
     artifact_paths: dict[str, str] | None = None,
+    revision_baseline_date: str | None = None,
 ) -> dict[str, Any]:
     decisions = decisions or {"document": {}, "indications": {}}
     base = {
@@ -218,6 +219,7 @@ def build_stage_packet(
         **common,
         "pipeline_approval_proposal": approval,
         "current_reviewed_approval": reviewed_approval,
+        "revision_baseline_date": revision_baseline_date,
         "decision": stage_decisions.get("approval"),
     }
 
@@ -411,12 +413,28 @@ def approval_markdown(packet: dict[str, Any]) -> str:
         if "indication" in indication_overrides
         else "Pipeline indication proposal"
     )
+    revision_baseline_date = packet.get("revision_baseline_date")
+    review_title = (
+        "current-form date review"
+        if revision_baseline_date
+        else "initial approval review"
+    )
+    proposed_date_label = (
+        "Proposed date current revised form first appeared"
+        if revision_baseline_date
+        else "Proposed date"
+    )
     lines = [
-        f"# {packet['display_name']} — initial approval review",
+        f"# {packet['display_name']} — {review_title}",
         "",
         "## Proposal to review — event selected by model",
         "",
-        f"- Proposed date: {event.get('date') or match.get('approval_date_candidate') or 'unmatched'}",
+        f"- {proposed_date_label}: {event.get('date') or match.get('approval_date_candidate') or 'unmatched'}",
+        *(
+            [f"- Previous curated label date: {revision_baseline_date}"]
+            if revision_baseline_date
+            else []
+        ),
         f"- Event: {event_number or 'unmatched'}",
         *(
             [f"- [Open Event {event_number} in the full local changelog](<{event_path}>)"]
@@ -485,6 +503,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--label-pdf", type=Path)
     parser.add_argument("--label-markdown", type=Path)
     parser.add_argument("--changelog-markdown", type=Path)
+    parser.add_argument("--revision-baseline-date")
     parser.add_argument("--output-dir", type=Path, required=True)
     return parser.parse_args()
 
@@ -548,6 +567,7 @@ def main() -> int:
         date_matches=load_json_list(dates_path, "Date matches") if dates_path else None,
         decisions=decisions,
         artifact_paths=artifacts,
+        revision_baseline_date=args.revision_baseline_date,
     )
     json_path, markdown_path = output_paths(args.output_dir.resolve(), args.stage, packet)
     write_json_atomic(json_path, packet)

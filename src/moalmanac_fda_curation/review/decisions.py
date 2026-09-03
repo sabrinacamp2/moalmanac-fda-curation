@@ -172,7 +172,20 @@ def one_file(directory: Path, pattern: str, name: str) -> Path:
     return matches[0]
 
 
-def review_inputs(work_dir: Path, stage: str) -> tuple[list[Path], list[str]]:
+def revision_context(work_dir: Path, indication_index: int | None) -> str | None:
+    path = work_dir / "intermediate" / "revision-targets.json"
+    if indication_index is None or not path.exists():
+        return None
+    payload = load_json_object(path, "Revision targets")
+    indexes = {
+        item.get("latest_indication_index") for item in payload.get("targets") or []
+    }
+    return payload.get("baseline_label_date") if indication_index in indexes else None
+
+
+def review_inputs(
+    work_dir: Path, stage: str, indication_index: int | None = None
+) -> tuple[list[Path], list[str]]:
     document = work_dir / "intermediate" / "document.proposal.json"
     if stage == "document":
         return [document], ["--document-json", str(document)]
@@ -195,12 +208,21 @@ def review_inputs(work_dir: Path, stage: str) -> tuple[list[Path], list[str]]:
         "--label-markdown",
         str(label_markdown),
     ]
+    baseline_date = revision_context(work_dir, indication_index)
     if stage == "description":
-        descriptions = work_dir / "intermediate" / "selected-description-proposals.json"
+        descriptions = work_dir / "intermediate" / (
+            "selected-revision-description-proposals.json"
+            if baseline_date
+            else "selected-description-proposals.json"
+        )
         sources.append(descriptions)
         command.extend(("--descriptions-json", str(descriptions)))
     if stage == "approval":
-        approvals = work_dir / "intermediate" / "selected-approval-evidence.json"
+        approvals = work_dir / "intermediate" / (
+            "selected-revision-date-evidence.json"
+            if baseline_date
+            else "selected-approval-evidence.json"
+        )
         changelog = one_file(
             work_dir / "intermediate" / "section1-changelogs",
             "*-section1-changelog.md",
@@ -215,6 +237,8 @@ def review_inputs(work_dir: Path, stage: str) -> tuple[list[Path], list[str]]:
                 str(changelog),
             )
         )
+        if baseline_date:
+            command.extend(("--revision-baseline-date", baseline_date))
     return sources, command
 
 
@@ -223,7 +247,9 @@ def main() -> int:
     work_dir = args.work_dir.resolve()
     decisions_path = work_dir / "review" / "decisions.json"
     review_log = work_dir / "review" / "review.md"
-    sources, review_command = review_inputs(work_dir, args.stage)
+    sources, review_command = review_inputs(
+        work_dir, args.stage, args.indication_index
+    )
     payload = load_decisions(decisions_path)
     overrides = dict(args.override)
     record_decision(

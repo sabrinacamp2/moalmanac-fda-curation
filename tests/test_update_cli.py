@@ -13,14 +13,26 @@ from moalmanac_fda_curation.workflows import (
     assess_revisions,
     check_preflight,
     find_revised_indications,
+    prepare_approval,
     prepare_label_history,
-    prepare_revision_review,
     prepare_update_indications,
     reconcile_indications,
 )
 
 
 class UpdateCliTest(unittest.TestCase):
+    def test_revision_date_events_are_strictly_after_baseline(self) -> None:
+        payload = {"events": [
+            {"event_number": 1, "date": "2025-01-01"},
+            {"event_number": 2, "date": "2025-04-11"},
+            {"event_number": 3, "date": "2026-01-01"},
+            {"event_number": 4, "date": "2026-09-01"},
+        ]}
+        result = prepare_approval.post_baseline_changelog(
+            payload, "2025-04-11", "2026-08-12"
+        )
+        self.assertEqual([event["event_number"] for event in result["events"]], [3])
+
     def test_cli_lists_update_commands(self) -> None:
         usage = cli.usage()
         self.assertIn("check-setup", usage)
@@ -28,7 +40,7 @@ class UpdateCliTest(unittest.TestCase):
         self.assertIn("reconcile-indications", usage)
         self.assertIn("find-new-indications", usage)
         self.assertIn("find-revised-indications", usage)
-        self.assertIn("record-revision-decision", usage)
+        self.assertNotIn("record-revision-decision", usage)
         self.assertIn("assemble-revisions", usage)
         self.assertNotIn("check-curation-preflight", usage)
         self.assertNotIn("prepare-update-indication-review", usage)
@@ -465,6 +477,31 @@ class UpdateCliTest(unittest.TestCase):
             database.mkdir(parents=True)
             indications = database / "indications.json"
             indications.write_text("[]")
+            (intermediate / "revision-assessment.json").write_text(json.dumps({
+                "verified": True,
+                "assessments": [{
+                    "existing_indication_id": "ind:fda.example:0",
+                    "status": "revised",
+                    "existing_indication": {
+                        "id": "ind:fda.example:0",
+                        "document_id": "doc:fda.example",
+                        "indication": "Old wording",
+                    },
+                    "changes": ["Wording changed."],
+                    "reason": "Latest label changed the indication.",
+                }],
+            }))
+            (intermediate / "indication-matches.json").write_text(json.dumps({
+                "mappings": [{
+                    "existing_indication_id": "ind:fda.example:0",
+                    "latest_indication_index": 2,
+                    "classification": "matched",
+                    "latest_indication": {
+                        "review_label": "Example cancer",
+                        "indication": "New wording",
+                    },
+                }],
+            }))
             history = prepare_label_history.LabelHistoryPaths(
                 intermediate / "history.json",
                 intermediate / "cache.json",
@@ -479,205 +516,20 @@ class UpdateCliTest(unittest.TestCase):
                 "prepare_label_history",
                 return_value=history,
             ) as prepare_history, patch.object(
-                find_revised_indications,
-                "run_revision_review",
-                return_value=0,
-            ) as review:
+                find_revised_indications.subprocess, "run"
+            ) as prepare_reviews:
                 self.assertEqual(find_revised_indications.main(), 0)
             prepare_history.assert_called_once_with(
                 work_dir,
                 overwrite=False,
                 baseline_label_url="https://example.test/old.pdf",
             )
-            review_args = review.call_args.args[0]
-            self.assertEqual(review_args.existing_indications_json, indications)
-            self.assertEqual(review_args.document_id, "doc:fda.example")
-            self.assertEqual(review_args.section_cache_json, history.cache_json)
-            self.assertEqual(review_args.changelog_json, history.changelog_json)
-            self.assertEqual(review_args.baseline_label_date, "2025-04-11")
-            self.assertEqual(review_args.latest_label_date, "2026-08-12")
-
-    def test_revision_markdown_shows_current_record_changes_and_recommendation(self) -> None:
-        existing = {
-            "id": "ind:fda.opdivo:1",
-            "indication": "Use an FDA-approved test.",
-            "description": "Existing description.",
-        }
-        assessment = {
-            "existing_indication_id": existing["id"],
-            "status": "revised",
-            "changes": ["Test designation changed."],
-            "reason": "The cited hunk changes the test designation.",
-            "existing_indication": existing,
-            "relevant_hunks": [{
-                "hunk_id": "hunk-1",
-                "baseline_text": "Use an FDA-approved test.",
-                "latest_text": "Use an FDA-authorized test.",
-            }],
-        }
-        proposal = {
-            "rationale": "- Update the test wording in the indication and description.",
-            "revision_event": {
-                "date": "2026-08-12",
-                "label_url": "https://example.test/new.pdf",
-            },
-            "proposed_indication": {
-                **existing,
-                "indication": "Use an FDA-authorized test.",
-                "description": "Updated description.",
-            },
-        }
-        markdown = prepare_revision_review.revision_markdown(
-            assessment,
-            proposal,
-            baseline_label_url="https://example.test/old.pdf",
-            latest_label_url="https://example.test/new.pdf",
-            baseline_label_date="2025-04-11",
-            latest_label_date="2026-08-12",
-            assessment_path=Path("/tmp/assessment.json"),
-            proposals_path=Path("/tmp/proposals.json"),
-            reconciliation_path=Path("/tmp/reconciliation.json"),
-            baseline_label_pdf_path=Path("/tmp/old.pdf"),
-            baseline_label_markdown_path=Path("/tmp/old.md"),
-            latest_label_pdf_path=Path("/tmp/new.pdf"),
-            latest_label_markdown_path=Path("/tmp/new.md"),
-            changelog_markdown_path=Path("/tmp/changelog.md"),
-        )
-        self.assertIn("Replaced `FDA-approved` with `FDA-authorized`", markdown)
-        self.assertIn("> Use an FDA-approved test.", markdown)
-        self.assertIn("## Recommendation", markdown)
-        self.assertIn("## Proposed changes", markdown)
-        self.assertIn("> Use an FDA-authorized test.", markdown)
-        self.assertIn("Update the test wording", markdown)
-        self.assertIn("### `indication`", markdown)
-        self.assertIn("### `description`", markdown)
-        self.assertIn("[Baseline FDA label PDF", markdown)
-        self.assertIn("[Latest FDA label Markdown]", markdown)
-        self.assertIn("[Indications and Usage changelog]", markdown)
-        self.assertIn("[Revision assessment JSON]", markdown)
-        self.assertIn("[Revision proposals JSON]", markdown)
-
-    def test_combined_revision_review_omits_unchanged_indications(self) -> None:
-        revised = {
-            "existing_indication_id": "ind:revised",
-            "status": "revised",
-            "relevant_hunk_ids": ["hunk-1"],
-            "changes": ["Changed wording."],
-            "reason": "Source changed.",
-            "existing_indication": {
-                "id": "ind:revised",
-                "indication": "Old wording",
-            },
-            "relevant_hunks": [{
-                "hunk_id": "hunk-1",
-                "baseline_text": "Old wording",
-                "latest_text": "New wording",
-            }],
-        }
-        unchanged = {
-            "existing_indication_id": "ind:unchanged",
-            "status": "not_revised",
-            "relevant_hunk_ids": [],
-            "changes": [],
-            "reason": "No relevant diff.",
-            "existing_indication": {
-                "id": "ind:unchanged",
-                "indication": "Unchanged wording",
-            },
-            "relevant_hunks": [],
-        }
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory).resolve()
-            intermediate = root / "intermediate"
-            intermediate.mkdir()
-            (intermediate / "revision-assessment.json").write_text(json.dumps({
-                "verified": True,
-                "document_id": "doc:1",
-                "diff_hunks": revised["relevant_hunks"],
-                "assessments": [revised, unchanged],
-            }))
-            (intermediate / "indication-matches.json").write_text(json.dumps({
-                "mappings": [{
-                    "existing_indication_id": "ind:revised",
-                    "classification": "matched",
-                    "latest_indication": {
-                        "indication": "New wording",
-                        "raw_biomarkers": "marker",
-                    },
-                }],
-            }))
-            argv = [
-                "prepare-revision-review",
-                "--existing-indications-json", str(root / "unused.json"),
-                "--document-id", "doc:1",
-                "--section-cache-json", str(root / "unused-cache.json"),
-                "--changelog-json", str(root / "unused-changelog.json"),
-                "--baseline-label-url", "https://example.test/old.pdf",
-                "--latest-label-url", "https://example.test/new.pdf",
-                "--baseline-label-date", "2025-04-11",
-                "--latest-label-date", "2026-08-12",
-                "--work-dir", str(root),
-            ]
-            with patch("sys.argv", argv), patch.object(
-                prepare_revision_review,
-                "review_revised_indication",
-                return_value={
-                    "rationale": "- Review this change.",
-                    "proposed_fields": {
-                        "indication": "New wording",
-                        "description": "Description",
-                        "raw_biomarkers": "marker",
-                        "raw_cancer_type": "cancer",
-                        "raw_therapeutics": "Example",
-                    },
-                    "revision_event_number": 2,
-                },
-            ) as review, patch.object(
-                prepare_revision_review,
-                "load_changelog_payload",
-                return_value={"events": [
-                    {"event_number": 1, "date": "2025-04-11"},
-                    {
-                        "event_number": 2,
-                        "date": "2026-08-12",
-                        "label_url": "https://example.test/new.pdf",
-                    },
-                ]},
-            ), patch.object(
-                prepare_revision_review,
-                "build_section1_changelog_markdown",
-                return_value="Bounded changelog",
-            ):
-                self.assertEqual(prepare_revision_review.main(), 0)
-            self.assertEqual(review.call_count, 1)
-            reviews = list((root / "review" / "revisions").glob("*.md"))
-            self.assertEqual(len(reviews), 1)
-            self.assertIn("ind:revised", reviews[0].read_text())
-            self.assertNotIn("ind:unchanged", reviews[0].read_text())
-            proposals = json.loads(
-                (intermediate / "revision-proposals.json").read_text()
-            )
-            self.assertEqual(
-                proposals["proposals"][0]["proposed_indication"]["indication"],
-                "New wording",
-            )
-
-    def test_bounded_changelog_filters_dates_and_renumbers_events(self) -> None:
-        payload = {"events": [
-            {"event_number": 4, "date": "2025-01-01"},
-            {"event_number": 5, "date": "2025-04-11"},
-            {"event_number": 8, "date": "2026-08-12"},
-            {"event_number": 9, "date": "2026-09-01"},
-        ]}
-        bounded = prepare_revision_review.bounded_changelog(
-            payload, "2025-04-11", "2026-08-12"
-        )
-        self.assertEqual(
-            [item["event_number"] for item in bounded["events"]], [1, 2]
-        )
-        self.assertEqual(
-            [item["original_event_number"] for item in bounded["events"]], [5, 8]
-        )
+            command = prepare_reviews.call_args.args[0]
+            self.assertIn("--revision-baseline-date", command)
+            self.assertIn("2025-04-11", command)
+            self.assertEqual(command[-2:], ["--indication-index", "2"])
+            targets = json.loads((intermediate / "revision-targets.json").read_text())
+            self.assertEqual(targets["targets"][0]["existing_indication_id"], "ind:fda.example:0")
 
     def test_commands_refuse_to_replace_artifacts_without_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
