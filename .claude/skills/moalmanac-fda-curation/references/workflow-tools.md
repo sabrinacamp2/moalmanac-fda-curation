@@ -136,7 +136,7 @@ moalmanac-fda-curation prepare-revision-reviews --work-dir RUN_DIR
 ```
 
 The command prints the latest-label indexes prepared for review. Review each through its
-description and current-form date files, one stage at a time. Its JSON
+description and label date and URL files, one stage at a time. Its JSON
 artifacts remain under `intermediate/`; do not present them unless requested.
 
 The tool chooses stable filenames:
@@ -173,6 +173,10 @@ For an approved edit, repeat `--override FIELD=JSON_VALUE`. Example:
 ```bash
 --decision edited --override 'raw_cancer_type="non-small cell lung cancer"'
 ```
+
+For a revision field that should retain its current MOAlmanac value, use
+`--keep-existing-field FIELD`. The tool retrieves the value from the persisted existing
+record and writes the resulting override; the harness should not reproduce that value.
 
 Never run this command before the curator states the decision. It locates and hashes the
 stage's source artifacts, records the decision, and rebuilds the affected review file.

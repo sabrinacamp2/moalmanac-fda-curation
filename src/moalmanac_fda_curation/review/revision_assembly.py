@@ -72,7 +72,7 @@ def assemble_updated_indications(
             stages.get("description"), f"indication {index} description"
         )
         approval_decision = accepted_entry(
-            stages.get("approval"), f"indication {index} current-form date"
+            stages.get("approval"), f"indication {index} label date and URL"
         )
         if index >= len(indications) or index not in descriptions or index not in dates:
             raise ValueError(f"Revision target {index} is missing prepared curation evidence")
@@ -84,7 +84,7 @@ def assemble_updated_indications(
         date_match = copy.deepcopy(dates[index])
         event = (date_match.get("verification") or {}).get("matched_event") or {}
         if not (date_match.get("verification") or {}).get("verified") or not event:
-            raise ValueError(f"Current-form date for indication {index} is not verified")
+            raise ValueError(f"Label date and URL for indication {index} are not verified")
         approval = {
             "initial_approval_date": event.get("date"),
             "initial_approval_url": event.get("label_url"),

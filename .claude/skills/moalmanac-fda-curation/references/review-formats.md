@@ -129,22 +129,32 @@ evidence so the curator can judge clinical equivalence without changing context.
 before/after evidence is copied directly from the selected changelog event, and it links
 to that numbered event in the full local changelog.
 
-For a revised indication, the same file is titled as a current-form date review. Assess
+For a revised indication, the same file is titled as a label date and URL review. Assess
 two questions separately: whether the selected event is the earliest post-baseline label
 that supports the revised wording, and whether the wording change is meaningful enough
 to replace the existing MOAlmanac date and URL. The curator may keep the existing date
 and URL when the newer wording does not warrant changing the record's approval
 provenance. Present these options:
 
-1. Use the proposed current-form date and URL
+1. Use the proposed label date and URL
 2. Keep the existing MOAlmanac date and URL
 3. Inspect earlier events
 4. Choose another event
 5. Leave unresolved
 6. Ask a question
 
-When the curator keeps the existing values, record an `edited` approval decision with
-the existing `initial_approval_date` and `initial_approval_url` as explicit overrides.
+When the curator keeps the existing values, let the tool retrieve them from the existing
+MOAlmanac record:
+
+```bash
+moalmanac-fda-curation record-decision \
+  --work-dir RUN_DIR \
+  --stage approval \
+  --indication-index INDEX \
+  --decision edited \
+  --keep-existing-field initial_approval_date \
+  --keep-existing-field initial_approval_url
+```
 
 ## Indication mapping review in chat
 

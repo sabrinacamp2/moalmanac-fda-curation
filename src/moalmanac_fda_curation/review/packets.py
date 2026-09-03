@@ -535,7 +535,7 @@ def approval_markdown(packet: dict[str, Any]) -> str:
     revision_baseline_date = packet.get("revision_baseline_date")
     existing = packet.get("existing_indication") or {}
     review_title = (
-        "current-form date review"
+        "label date and URL review"
         if revision_baseline_date
         else "initial approval review"
     )
@@ -579,7 +579,7 @@ def approval_markdown(packet: dict[str, Any]) -> str:
         lines.extend(
             [
                 "",
-                "## Existing MOAlmanac approval evidence",
+                "## Existing MOAlmanac date and URL",
                 "",
                 f"- Initial approval date: {existing.get('initial_approval_date') or 'null'}",
                 f"- Initial approval URL: {existing.get('initial_approval_url') or 'null'}",

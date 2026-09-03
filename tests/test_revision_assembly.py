@@ -193,7 +193,7 @@ class RevisionAssemblyTest(unittest.TestCase):
 
     def test_incomplete_stage_decision_blocks_assembly(self) -> None:
         del self.decisions["indications"]["1"]["approval"]
-        with self.assertRaisesRegex(ValueError, "current-form date"):
+        with self.assertRaisesRegex(ValueError, "label date and URL"):
             assemble_updated_indications(
                 self.targets,
                 self.indications,

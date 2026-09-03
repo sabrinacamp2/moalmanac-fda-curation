@@ -80,7 +80,7 @@ indication indexes printed by the command and then proceed to revision analysis.
 Revision analysis uses `find-revised-indications`. It identifies changed matched
 indications and creates a short screening review for each one. Record whether to use
 the latest-label proposal, keep the existing record, or leave the choice unresolved.
-Then `prepare-revision-reviews` prepares description and current-form date reviews only
+Then `prepare-revision-reviews` prepares description and label date and URL reviews only
 for indications moving to the latest-label proposal. `assemble-revisions`
 preserves existing IDs and writes the approved indication records together with
 targeted and fully materialized document and label-URL updates.

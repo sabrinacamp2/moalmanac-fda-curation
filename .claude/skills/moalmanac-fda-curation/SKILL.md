@@ -1,6 +1,6 @@
 ---
 name: moalmanac-fda-curation
-description: Determine whether an FDA oncology application needs first-time or update curation, then guide evidence-backed review of new or revised MOAlmanac indications using the repository CLI. Use for FDA-label curation sessions, including checking prior curation and comparing a newer label with existing records.
+description: Determine whether an FDA oncology application needs first-time curation or newer-label review, then guide curator review of new indications and changes to existing MOAlmanac indications using the repository CLI.
 ---
 
 # Curate an FDA label for MOAlmanac
@@ -86,6 +86,6 @@ skill. If useful, add a clearly labeled harness assessment of the generated revi
 evidence without treating it as pipeline state.
 
 For changed indications, assemble revision output only after the curator resolves the
-revision screening, description, and current-form date reviews. Report the assembled
+revision screening, description, and label date and URL reviews. Report the assembled
 output without adding another review step. Do not revise `moalmanac-db`, commit, push, or
 open a pull request without a separate explicit request.

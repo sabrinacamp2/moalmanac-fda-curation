@@ -168,6 +168,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--decision", choices=sorted(VALID_DECISIONS), required=True)
     parser.add_argument("--indication-index", type=int)
     parser.add_argument("--override", action="append", type=parse_override, default=[])
+    parser.add_argument(
+        "--keep-existing-field",
+        action="append",
+        default=[],
+        help="Fill this override from the existing MOAlmanac revision target.",
+    )
     parser.add_argument("--note")
     parser.add_argument("--display-name", help="Curator-facing indication title for the review log.")
     return parser.parse_args()
@@ -191,6 +197,36 @@ def revision_context(work_dir: Path, indication_index: int | None) -> str | None
         item.get("latest_indication_index") for item in payload.get("targets") or []
     }
     return payload.get("baseline_label_date") if indication_index in indexes else None
+
+
+def existing_field_overrides(
+    work_dir: Path,
+    indication_index: int | None,
+    fields: list[str],
+) -> dict[str, Any]:
+    """Retrieve selected fields from one existing MOAlmanac indication record."""
+    if not fields:
+        return {}
+    if indication_index is None:
+        raise ValueError("Keeping existing fields requires an indication index")
+    payload = load_json_object(
+        work_dir / "intermediate" / "revision-targets.json", "Revision targets"
+    )
+    targets = [
+        target
+        for target in payload.get("targets") or []
+        if target.get("latest_indication_index") == indication_index
+    ]
+    if len(targets) != 1:
+        raise ValueError(
+            f"Expected one revision target for indication {indication_index}; "
+            f"found {len(targets)}"
+        )
+    existing = targets[0].get("existing_indication") or {}
+    missing = [field for field in fields if field not in existing]
+    if missing:
+        raise ValueError(f"Existing indication is missing fields: {missing}")
+    return {field: existing[field] for field in fields}
 
 
 def review_inputs(
@@ -276,6 +312,21 @@ def main() -> int:
     )
     payload = load_decisions(decisions_path)
     overrides = dict(args.override)
+    requested_existing = list(dict.fromkeys(args.keep_existing_field))
+    unsupported_existing = set(requested_existing) - ALLOWED_OVERRIDES[args.stage]
+    if unsupported_existing:
+        raise ValueError(
+            f"Unsupported {args.stage} existing field(s): {sorted(unsupported_existing)}"
+        )
+    duplicate_fields = set(overrides) & set(requested_existing)
+    if duplicate_fields:
+        raise ValueError(
+            "Fields cannot use both --override and --keep-existing-field: "
+            f"{sorted(duplicate_fields)}"
+        )
+    overrides.update(
+        existing_field_overrides(work_dir, args.indication_index, requested_existing)
+    )
     record_decision(
         payload=payload,
         stage=args.stage,

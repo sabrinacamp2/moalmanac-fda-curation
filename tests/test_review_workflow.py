@@ -21,6 +21,7 @@ from moalmanac_fda_curation.doctor import virtual_environment_status
 from moalmanac_fda_curation.review.decisions import (
     decision_sources,
     empty_decisions,
+    existing_field_overrides,
     record_decision,
     verify_decision_sources,
 )
@@ -28,6 +29,32 @@ from moalmanac_fda_curation.workflows import extract_candidates, prepare_documen
 
 
 class ReviewWorkflowTest(unittest.TestCase):
+    def test_existing_revision_fields_are_retrieved_deterministically(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            work_dir = Path(directory)
+            intermediate = work_dir / "intermediate"
+            intermediate.mkdir()
+            (intermediate / "revision-targets.json").write_text(json.dumps({
+                "targets": [{
+                    "latest_indication_index": 4,
+                    "existing_indication": {
+                        "initial_approval_date": "2020-06-29",
+                        "initial_approval_url": "https://example.test/original.pdf",
+                    },
+                }]
+            }))
+            self.assertEqual(
+                existing_field_overrides(
+                    work_dir,
+                    4,
+                    ["initial_approval_date", "initial_approval_url"],
+                ),
+                {
+                    "initial_approval_date": "2020-06-29",
+                    "initial_approval_url": "https://example.test/original.pdf",
+                },
+            )
+
     def setUp(self) -> None:
         self.document = {
             "id": "doc:fda.example",
@@ -258,7 +285,7 @@ class ReviewWorkflowTest(unittest.TestCase):
             revision_baseline_date="2025-04-11",
         )
         markdown = approval_markdown(packet)
-        self.assertIn("current-form date review", markdown)
+        self.assertIn("label date and URL review", markdown)
         self.assertIn("Proposed date current revised form first appeared", markdown)
         self.assertIn("Previous curated label date: 2025-04-11", markdown)
         self.assertNotIn("initial approval review", markdown)
@@ -361,7 +388,7 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.assertIn("Existing description wording.", description_review)
 
         approval_review = approval_markdown(approval_packet)
-        self.assertIn("Existing MOAlmanac approval evidence", approval_review)
+        self.assertIn("Existing MOAlmanac date and URL", approval_review)
         self.assertIn("2024-03-01", approval_review)
         self.assertIn("https://example.test/existing.pdf", approval_review)
         self.assertIn("meaningful enough to replace", approval_review)
