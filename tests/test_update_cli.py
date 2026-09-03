@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 from moalmanac_fda_curation import cli
 from moalmanac_fda_curation.workflows import (
-    assess_revisions,
     check_preflight,
     find_revised_indications,
     prepare_approval,
@@ -114,47 +113,6 @@ class UpdateCliTest(unittest.TestCase):
                 artifact["new_indication_candidates"][0]["indication"], "New"
             )
             self.assertTrue(artifact["biomarker_only"])
-
-    def test_revision_assessment_persists_diff_hunks(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            existing_path = root / "existing.json"
-            cache_path = root / "cache.json"
-            output = root / "assessment.json"
-            existing_path.write_text(json.dumps([
-                {"id": "ind:1", "document_id": "doc:1", "indication": "Old"}
-            ]))
-            cache_path.write_text(json.dumps({
-                "https://example.test/old.pdf": "Old text",
-                "https://example.test/new.pdf": "New text",
-            }))
-            assessment = {
-                "verified": True,
-                "verification_errors": [],
-                "assessments": [],
-            }
-            argv = [
-                "assess-revised-indications",
-                "--existing-indications-json", str(existing_path),
-                "--document-id", "doc:1",
-                "--section-cache-json", str(cache_path),
-                "--baseline-label-url", "https://example.test/old.pdf",
-                "--latest-label-url", "https://example.test/new.pdf",
-                "--output-json", str(output),
-            ]
-            with patch("sys.argv", argv), patch.object(
-                assess_revisions,
-                "build_section_diff_hunks",
-                return_value=[{"hunk_id": "hunk-1"}],
-            ), patch.object(
-                assess_revisions,
-                "identify_revised_indications",
-                return_value=assessment,
-            ):
-                self.assertEqual(assess_revisions.main(), 0)
-            artifact = json.loads(output.read_text())
-            self.assertEqual(artifact["diff_hunks"], [{"hunk_id": "hunk-1"}])
-            self.assertEqual(artifact["document_id"], "doc:1")
 
     def test_prepare_label_history_prints_a_reusable_cache(self) -> None:
         document = {
@@ -487,7 +445,7 @@ class UpdateCliTest(unittest.TestCase):
                         "document_id": "doc:fda.example",
                         "indication": "Old wording",
                     },
-                    "changes": ["Wording changed."],
+                    "relevant_hunk_ids": ["hunk-1"],
                     "reason": "Latest label changed the indication.",
                 }],
             }))

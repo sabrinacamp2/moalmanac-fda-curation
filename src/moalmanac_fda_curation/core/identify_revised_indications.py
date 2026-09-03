@@ -22,7 +22,6 @@ class ExistingIndicationRevision(BaseModel):
     existing_indication_id: str
     status: Literal["revised", "not_revised", "uncertain"]
     relevant_hunk_ids: list[str] = Field(default_factory=list)
-    changes: list[str] = Field(default_factory=list)
     reason: str
 
 
@@ -139,12 +138,14 @@ change concerning a different indication is not evidence that the target changed
 # Output rules
 
 - Return exactly one assessment for every existing indication.
-- For `revised`, cite every relevant label-change ID and tersely describe each change.
-- For `not_revised`, return empty `relevant_hunk_ids` and `changes` lists.
+- For `revised`, cite every relevant label-change ID.
+- For `not_revised`, return an empty `relevant_hunk_ids` list.
 - Capture every target-specific source-text change, including punctuation, hyphenation,
   capitalization, abbreviation, terminology, and semantically equivalent wording.
-- Describe the exact before-and-after wording without judging whether a change is minor,
-  clinically important, or actionable in MOAlmanac.
+- Express source evidence exclusively through `relevant_hunk_ids`; the referenced source
+  text will be attached deterministically after this assessment.
+- Keep `reason` to one sentence explaining why the cited change applies to the target,
+  without judging whether it is minor, clinically important, or actionable in MOAlmanac.
 - Treat PDF line wrapping and whitespace-only differences as extraction layout rather
   than source-text changes.
 - Compare only what the source text explicitly states. Do not infer that an omitted
@@ -196,20 +197,17 @@ def identify_revised_indications(
         indication_id = assessment["existing_indication_id"]
         status = assessment["status"]
         hunk_ids = assessment["relevant_hunk_ids"]
-        changes = assessment["changes"]
         if indication_id not in existing_by_id:
             errors.append(f"Assessment {index} cites unknown indication ID: {indication_id}")
         seen_ids.append(indication_id)
         unknown_hunks = [hunk_id for hunk_id in hunk_ids if hunk_id not in hunks_by_id]
         for hunk_id in unknown_hunks:
             errors.append(f"Assessment {index} cites unknown label change: {hunk_id}")
-        if status == "revised" and (not hunk_ids or not changes):
+        if status == "revised" and not hunk_ids:
+            errors.append(f"Assessment {index} revised status requires label-change IDs")
+        if status == "not_revised" and hunk_ids:
             errors.append(
-                f"Assessment {index} revised status requires hunk IDs and changes"
-            )
-        if status == "not_revised" and (hunk_ids or changes):
-            errors.append(
-                f"Assessment {index} not_revised status must not report changes"
+                f"Assessment {index} not_revised status must not cite label changes"
             )
         hydrated.append(
             {

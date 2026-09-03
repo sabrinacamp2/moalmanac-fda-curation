@@ -62,7 +62,7 @@ def revision_targets(
                     or (mapping.get("latest_indication") or {}).get("raw_cancer_type")
                     or f"Indication {mapping['latest_indication_index']}"
                 ),
-                "identified_changes": item.get("changes") or [],
+                "label_change_ids": item.get("relevant_hunk_ids") or [],
                 "reason": item.get("reason"),
             }
         )

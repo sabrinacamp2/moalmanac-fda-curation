@@ -58,7 +58,6 @@ class IdentifyRevisedIndicationsTest(unittest.TestCase):
                 "existing_indication_id": "ind:1",
                 "status": "revised",
                 "relevant_hunk_ids": ["hunk-1"],
-                "changes": ["The population is now explicitly adult."],
                 "reason": "The hunk changes the target population wording.",
             }]},
         )
@@ -73,7 +72,9 @@ class IdentifyRevisedIndicationsTest(unittest.TestCase):
         self.assertIn("generated deterministically from the source label text", prompt)
         self.assertIn("A new indication", prompt)
         self.assertIn("including punctuation, hyphenation", prompt)
-        self.assertIn("without judging whether a change is minor", prompt)
+        self.assertIn("exclusively through `relevant_hunk_ids`", prompt)
+        self.assertIn("attached deterministically", prompt)
+        self.assertIn("without judging whether it is minor", prompt)
         self.assertIn("whitespace-only differences as extraction layout", prompt)
         self.assertNotIn("description", prompt)
 
