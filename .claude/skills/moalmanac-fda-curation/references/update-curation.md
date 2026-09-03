@@ -16,7 +16,8 @@ moalmanac-fda-curation find-new-indications \
 
 Route from the command output:
 
-- If it prints an indication match review, link that file and stop for curator input.
+- If it prints indication mapping reviews, present the linked files one at a time and
+  stop for curator input before continuing.
 - Link the printed new-indication review and summarize the reported biomarker status.
   Present indications outside biomarker scope as findings and the biomarker-bearing
   subset as curation candidates.

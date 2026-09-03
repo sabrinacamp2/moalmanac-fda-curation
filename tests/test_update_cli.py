@@ -192,37 +192,51 @@ class UpdateCliTest(unittest.TestCase):
                 self.assertEqual(prepare_label_history.main(), 0)
             build_again.assert_not_called()
 
-    def test_match_review_markdown_only_surfaces_unresolved_mappings(self) -> None:
+    def test_not_found_review_contains_existing_record_and_label_links(self) -> None:
         preflight = {
             "application_number": "BLA125554",
             "curated_label_date": "2025-04-11",
+            "curated_label_url": "https://example.test/curated.pdf",
             "latest_label_date": "2026-08-12",
         }
-        reconciliation = {
-            "verified": True,
-            "mappings": [
-                {
-                    "classification": "new",
-                    "latest_indication": {"indication": "New FDA indication"},
-                    "reason": "No existing counterpart.",
-                },
-                {
-                    "classification": "not_found",
-                    "existing_indication": {"indication": "Existing indication"},
-                    "reason": "No latest counterpart.",
-                },
-            ],
+        mapping = {
+            "classification": "not_found",
+            "existing_indication_id": "ind:fda.opdivo:1",
+            "existing_indication": {
+                "id": "ind:fda.opdivo:1",
+                "indication": "Existing indication",
+                "description": "Existing description",
+                "initial_approval_date": "2021-01-01",
+                "initial_approval_url": "https://example.test/initial.pdf",
+            },
+            "reason": "No latest counterpart.",
         }
         markdown = prepare_update_indications.match_review_markdown(
             preflight,
-            reconciliation,
+            mapping,
             reconciliation_path=Path("/tmp/reconciliation.json"),
             latest_indications_path=Path("/tmp/latest.json"),
+            label_markdown_path=Path("/tmp/latest-label.md"),
+            curated_label_pdf_path=Path("/tmp/curated-label.pdf"),
+            initial_label_pdf_path=Path("/tmp/initial-label.pdf"),
         )
-        self.assertIn("Existing indications not found: 1", markdown)
+        self.assertIn("Existing indication not found", markdown)
         self.assertIn("Existing indication", markdown)
-        self.assertNotIn("New FDA indication", markdown)
-        self.assertIn("not evidence that FDA removed", markdown)
+        self.assertIn("Existing description", markdown)
+        self.assertIn("does not establish that FDA removed", markdown)
+        self.assertIn("## Review these", markdown)
+        self.assertIn("## More evidence", markdown)
+        self.assertIn("[Initial approval label — 2021-01-01]", markdown)
+        self.assertIn("[Previous curated label — 2025-04-11]", markdown)
+        self.assertIn("[Latest label — 2026-08-12]", markdown)
+        self.assertNotIn("[Latest-label PDF]", markdown)
+        self.assertIn("(</tmp/curated-label.pdf>)", markdown)
+        self.assertIn("(</tmp/initial-label.pdf>)", markdown)
+        self.assertNotIn("example.test/curated.pdf>)", markdown)
+        self.assertLess(
+            markdown.index("[Previous curated label"),
+            markdown.index("[Initial approval label"),
+        )
 
     def test_combined_update_command_writes_review(self) -> None:
         document = {
@@ -308,8 +322,8 @@ class UpdateCliTest(unittest.TestCase):
             ):
                 self.assertEqual(prepare_update_indications.main(), 0)
 
-            review = work_dir / "review" / "indication-match-review.md"
-            self.assertFalse(review.exists())
+            review_dir = work_dir / "review" / "indication-matches"
+            self.assertFalse(review_dir.exists())
             reconciliation_path = (
                 work_dir / "intermediate" / "indication-reconciliation.json"
             )
@@ -319,26 +333,43 @@ class UpdateCliTest(unittest.TestCase):
         preflight = {
             "application_number": "BLA125554",
             "curated_label_date": "2025-04-11",
+            "curated_label_url": "https://example.test/curated.pdf",
             "latest_label_date": "2026-08-12",
         }
-        reconciliation = {
-            "verified": True,
-            "mappings": [{
-                "classification": "uncertain",
-                "existing_indication": {"indication": "Existing indication"},
-                "latest_indication": {"indication": "Possible counterpart"},
-                "reason": "Possible split.",
-            }],
+        mapping = {
+            "classification": "uncertain",
+            "existing_indication": {
+                "indication": "Existing indication",
+                "initial_approval_date": "2025-04-11",
+                "initial_approval_url": "https://example.test/curated.pdf",
+                "raw_biomarkers": "HER2-positive",
+                "raw_cancer_type": "breast cancer",
+                "raw_therapeutics": "Example drug",
+            },
+            "latest_indication": {
+                "indication": "Possible counterpart",
+                "raw_biomarkers": "HER2 positive",
+                "raw_cancer_type": "metastatic breast cancer",
+                "raw_therapeutics": "Example drug with chemotherapy",
+            },
+            "reason": "Possible split.",
         }
         markdown = prepare_update_indications.match_review_markdown(
             preflight,
-            reconciliation,
+            mapping,
             reconciliation_path=Path("/tmp/reconciliation.json"),
             latest_indications_path=Path("/tmp/latest.json"),
+            label_markdown_path=Path("/tmp/latest-label.md"),
+            curated_label_pdf_path=Path("/tmp/curated-label.pdf"),
+            initial_label_pdf_path=Path("/tmp/curated-label.pdf"),
         )
         self.assertIn("Existing indication", markdown)
         self.assertIn("Possible counterpart", markdown)
         self.assertIn("Possible split", markdown)
+        self.assertIn("## Structured comparison", markdown)
+        self.assertIn("HER2-positive", markdown)
+        self.assertIn("metastatic breast cancer", markdown)
+        self.assertNotIn("[Initial approval label", markdown)
 
     def test_new_indication_summary_separates_findings_from_curation_candidates(self) -> None:
         mappings = [

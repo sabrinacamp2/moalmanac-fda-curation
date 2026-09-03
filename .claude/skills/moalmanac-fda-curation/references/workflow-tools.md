@@ -116,8 +116,8 @@ moalmanac-fda-curation find-new-indications \
 ```
 
 Successful matches require no separate review. When an existing indication is not found
-or cannot be matched confidently, the command writes
-`review/indication-match-review.md`; stop for curator review in that case. Otherwise,
+or cannot be matched confidently, the command writes one evidence file per mapping in
+`review/indication-matches/`; stop for curator review in that case. Otherwise,
 curate any printed new-indication indexes, or proceed directly to revision analysis when
 there are none.
 

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import subprocess
 import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from ..core.artifacts import load_json_object, write_json_atomic
 from ..core.check_curation_preflight import check_curation_preflight
@@ -15,7 +18,9 @@ from ..core.curate_doc_from_drugsfda_endpoint import curate_document
 from ..core.extract_indications_from_fda_label import (
     DEFAULT_MAX_TOKENS as EXTRACTION_MAX_TOKENS,
     DEFAULT_MODEL as EXTRACTION_MODEL,
+    download_pdf_bytes,
     output_stem,
+    write_bytes,
 )
 from ..core.identify_new_indications import (
     DEFAULT_MODEL as RECONCILIATION_MODEL,
@@ -72,13 +77,6 @@ def mapping_groups(result: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         if classification in groups:
             groups[classification].append(mapping)
     return groups
-
-
-def indication_text(mapping: dict[str, Any], side: str) -> str:
-    value = mapping.get(side)
-    if isinstance(value, dict) and isinstance(value.get("indication"), str):
-        return value["indication"]
-    return "Not available"
 
 
 def print_new_indication_summary(
@@ -163,52 +161,127 @@ def new_indication_review_markdown(
     return "\n".join(lines)
 
 
+def slugify(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-") or "mapping"
+
+
+def markdown_json(value: Any) -> list[str]:
+    return ["```json", json.dumps(value, indent=2, ensure_ascii=False), "```"]
+
+
+def table_value(value: Any) -> str:
+    if value is None:
+        return "Not available"
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def match_review_filename(mapping: dict[str, Any], position: int) -> str:
+    classification = mapping["classification"]
+    identity = mapping.get("existing_indication_id")
+    if identity is None:
+        identity = f"latest-{mapping.get('latest_indication_index', position)}"
+    return f"{slugify(classification)}-{slugify(str(identity))}.md"
+
+
+def local_review_label_pdf(
+    url: str,
+    label_date: str,
+    directory: Path,
+    *,
+    overwrite: bool,
+) -> Path:
+    """Download one review-source label to a stable local path."""
+    source_name = Path(urlsplit(url).path).name
+    filename = source_name if source_name.lower().endswith(".pdf") else "label.pdf"
+    path = directory / f"{slugify(label_date)}-{filename}"
+    if not path.exists() or overwrite:
+        write_bytes(path, download_pdf_bytes(url), overwrite=overwrite)
+    return path
+
+
 def match_review_markdown(
     preflight: dict[str, Any],
-    reconciliation: dict[str, Any],
+    mapping: dict[str, Any],
     *,
     reconciliation_path: Path,
     latest_indications_path: Path,
+    label_markdown_path: Path,
+    curated_label_pdf_path: Path,
+    initial_label_pdf_path: Path | None = None,
 ) -> str:
-    groups = mapping_groups(reconciliation)
+    classification = mapping["classification"]
+    if classification not in {"not_found", "uncertain"}:
+        raise ValueError("Match reviews are only generated for unresolved mappings")
+    existing = mapping.get("existing_indication")
+    latest = mapping.get("latest_indication")
+    title = (
+        "Existing indication not found in latest-label extraction"
+        if classification == "not_found"
+        else "Uncertain indication mapping"
+    )
     lines = [
-        "# Indications needing match review",
+        f"# {title}",
         "",
         f"- Application: {preflight['application_number']}",
         f"- MOAlmanac curated label date: {preflight['curated_label_date']}",
         f"- Latest FDA label date: {preflight['latest_label_date']}",
-        f"- Reconciliation verified: {'yes' if reconciliation.get('verified') else 'no'}",
+        f"- Classification: `{classification}`",
         "",
-        f"- Existing indications not found: {len(groups['not_found'])}",
-        f"- Uncertain mappings: {len(groups['uncertain'])}",
+        "## Mapping assessment",
         "",
-        "`not_found` means no counterpart was identified in the latest extraction. It is",
-        "not evidence that FDA removed the indication.",
+        mapping.get("reason") or "Not provided",
     ]
-    sections = (
-        ("Existing indications not found", "not_found"),
-        ("Uncertain mappings", "uncertain"),
+    if classification == "not_found":
+        lines.extend(
+            [
+                "",
+                "This means no counterpart was identified in the latest extraction. It",
+                "does not establish that FDA removed the indication.",
+            ]
+        )
+    if isinstance(existing, dict):
+        lines.extend(["", "## Existing MOAlmanac record", "", *markdown_json(existing)])
+    if isinstance(latest, dict):
+        lines.extend(["", "## Possible latest-label counterpart", "", *markdown_json(latest)])
+    if classification == "uncertain":
+        existing = existing if isinstance(existing, dict) else {}
+        latest = latest if isinstance(latest, dict) else {}
+        lines.extend(
+            [
+                "",
+                "## Structured comparison",
+                "",
+                "| Field | Existing MOAlmanac | Latest-label candidate |",
+                "|---|---|---|",
+                f"| Biomarker | {table_value(existing.get('raw_biomarkers'))} | {table_value(latest.get('raw_biomarkers'))} |",
+                f"| Cancer type | {table_value(existing.get('raw_cancer_type'))} | {table_value(latest.get('raw_cancer_type'))} |",
+                f"| Therapeutics | {table_value(existing.get('raw_therapeutics'))} | {table_value(latest.get('raw_therapeutics'))} |",
+            ]
+        )
+    initial_date = existing.get("initial_approval_date") if isinstance(existing, dict) else None
+    initial_url = existing.get("initial_approval_url") if isinstance(existing, dict) else None
+    show_initial_label = (
+        initial_label_pdf_path is not None
+        and initial_url != preflight.get("curated_label_url")
+        and initial_url != preflight.get("latest_label_url")
     )
-    for title, classification in sections:
-        lines.extend(["", f"## {title}", ""])
-        if not groups[classification]:
-            lines.append("None.")
-            continue
-        for mapping in groups[classification]:
-            lines.extend(
-                [
-                    f"- Existing: {indication_text(mapping, 'existing_indication')}",
-                    f"  - Latest: {indication_text(mapping, 'latest_indication')}",
-                    f"  - Reason: {mapping.get('reason') or 'Not provided'}",
-                ]
-            )
     lines.extend(
         [
             "",
-            "## Full artifacts",
+            "## Review these",
             "",
-            f"- [Reconciliation JSON](<{reconciliation_path}>)",
+            f"- [Previous curated label — {preflight['curated_label_date']}](<{curated_label_pdf_path}>)",
+            f"- [Latest label — {preflight['latest_label_date']}](<{label_markdown_path}>)",
+            "",
+            "## More evidence",
+            "",
+            *(
+                [f"- [Initial approval label — {initial_date}](<{initial_label_pdf_path}>)"]
+                if show_initial_label
+                else []
+            ),
             f"- [Latest-label indication extraction](<{latest_indications_path}>)",
+            f"- [Mapping details](<{reconciliation_path}>)",
             "",
         ]
     )
@@ -225,7 +298,8 @@ def main() -> int:
     review_dir = work_dir / "review"
     preflight_path = intermediate / "curation-status.json"
     reconciliation_path = intermediate / "indication-reconciliation.json"
-    review_path = review_dir / "indication-match-review.md"
+    match_review_dir = review_dir / "indication-matches"
+    review_label_dir = work_dir / "labels" / "review-sources"
     new_review_path = review_dir / "new-indications.md"
 
     preflight = check_curation_preflight(
@@ -318,21 +392,60 @@ def main() -> int:
     groups = mapping_groups(reconciliation)
     exceptions = groups["not_found"] + groups["uncertain"]
     if exceptions:
-        markdown = match_review_markdown(
-            preflight,
-            reconciliation,
-            reconciliation_path=reconciliation_path,
-            latest_indications_path=latest_indications_path,
-        )
-        if review_path.exists() and not args.overwrite:
-            if review_path.read_text(encoding="utf-8") != markdown:
-                raise FileExistsError(
-                    f"Indication match review exists with different content: {review_path}"
+        latest_label_pdf = work_dir / "labels" / f"{stem}.pdf"
+        local_label_paths: dict[str, Path] = {
+            preflight["latest_label_url"]: latest_label_pdf
+        }
+
+        def local_label(url: str, label_date: str) -> Path:
+            if url not in local_label_paths:
+                local_label_paths[url] = local_review_label_pdf(
+                    url,
+                    label_date,
+                    review_label_dir,
+                    overwrite=args.overwrite,
                 )
-        else:
-            review_path.parent.mkdir(parents=True, exist_ok=True)
-            review_path.write_text(markdown, encoding="utf-8")
-        print(f"Indications needing match review: {review_path}")
+            return local_label_paths[url]
+
+        curated_label_pdf = local_label(
+            preflight["curated_label_url"], preflight["curated_label_date"]
+        )
+        for position, mapping in enumerate(exceptions):
+            existing_indication = mapping.get("existing_indication")
+            initial_url = (
+                existing_indication.get("initial_approval_url")
+                if isinstance(existing_indication, dict)
+                else None
+            )
+            initial_date = (
+                existing_indication.get("initial_approval_date")
+                if isinstance(existing_indication, dict)
+                else None
+            )
+            initial_label_pdf = (
+                local_label(initial_url, initial_date or "initial-approval")
+                if isinstance(initial_url, str)
+                else None
+            )
+            path = match_review_dir / match_review_filename(mapping, position)
+            markdown = match_review_markdown(
+                preflight,
+                mapping,
+                reconciliation_path=reconciliation_path,
+                latest_indications_path=latest_indications_path,
+                label_markdown_path=work_dir / "labels" / f"{stem}.md",
+                curated_label_pdf_path=curated_label_pdf,
+                initial_label_pdf_path=initial_label_pdf,
+            )
+            if path.exists() and not args.overwrite:
+                if path.read_text(encoding="utf-8") != markdown:
+                    raise FileExistsError(
+                        f"Indication match review exists with different content: {path}"
+                    )
+            else:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(markdown, encoding="utf-8")
+            print(f"Indication mapping review: {path}")
         print("Curator review required before continuing.")
     else:
         print("All existing indications matched confidently.")

@@ -130,6 +130,36 @@ source artifacts.>
 
 Present the generated revision review files one at a time.
 
+## Indication mapping review in chat
+
+Present mapping reviews only for existing indications classified as `not_found` or
+`uncertain`, one at a time. The linked file owns the evidence; curator choices stay in
+chat.
+
+For `not_found`:
+
+```markdown
+[Open the indication mapping review](<absolute-path-to/review/indication-matches/not-found-*.md>)
+
+**Harness assessment:** <Assess whether the indication appears absent, was missed by
+extraction, or may correspond to differently worded current-label text.>
+
+Tell me whether you found a current-label counterpart, believe the indication is absent,
+want to inspect more evidence, or want to leave this unresolved.
+```
+
+For `uncertain`:
+
+```markdown
+[Open the indication mapping review](<absolute-path-to/review/indication-matches/uncertain-*.md>)
+
+**Harness assessment:** <Assess the proposed relationship without restating both
+records.>
+
+Tell me whether these are the same indication, whether another counterpart is a better
+match, whether this reflects a split or merge, or whether to leave it unresolved.
+```
+
 ## Confirm an edit
 
 `record-decision` rebuilds the deterministic review file automatically. After an edit,

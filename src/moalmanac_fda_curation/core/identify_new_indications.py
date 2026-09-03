@@ -83,8 +83,6 @@ newer FDA label, and classify every resulting relationship.
 
 Determine whether each existing and newer-label record represents the same
 underlying FDA indication. This task is only about identity across label versions.
-Do not compare or report wording differences, and do not decide whether a matched
-indication is the same or revised.
 
 # Existing MOAlmanac indications
 

@@ -41,7 +41,8 @@ class IdentifyNewIndicationsTest(unittest.TestCase):
         self.assertEqual(result["mappings"][0]["existing_indication"]["id"], "ind:1")
         prompt = prompts[0]
         self.assertIn("only about identity across label versions", prompt)
-        self.assertIn("Do not compare or report wording differences", prompt)
+        self.assertIn("wording differences do not by", prompt)
+        self.assertIn("themselves make a newer-label indication `new`", prompt)
         self.assertNotIn("`same`:", prompt)
         self.assertNotIn("`revised`:", prompt)
         self.assertNotIn("document_id", prompt)
