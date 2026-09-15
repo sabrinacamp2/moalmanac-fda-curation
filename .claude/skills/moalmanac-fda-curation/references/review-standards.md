@@ -36,7 +36,7 @@ or comment on other wording differences between the description and indication. 
 description generator intentionally applies ASCO Language of Respect, person-first
 phrasing, standardized terminology, generic drug names, clear abbreviation expansion,
 and `variant` instead of `mutation`; those editorial transformations are outside the
-harness assessment.
+routine curator decision unless the curator asks about them.
 
 Verify that selected Clinical Studies or Clinical Pharmacology evidence concerns the same
 disease, biomarker, line of therapy, and regimen as the indication. Added detail must not

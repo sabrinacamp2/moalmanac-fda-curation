@@ -10,8 +10,9 @@ from ..core.artifacts import (
     document_label_url,
     load_document_artifact,
     resolve_document_application_number,
+    same_url_path,
 )
-from ..core.build_section1_changelogs import build_changelog, output_stem
+from ..core.build_section1_changelogs import build_changelog, load_cache, output_stem
 
 
 class LabelHistoryPaths(NamedTuple):
@@ -53,12 +54,22 @@ def prepare_label_history(
     ]
     if existing and not overwrite:
         if len(existing) == 2 and cache_json.exists():
-            return LabelHistoryPaths(changelog_json, cache_json)
-        paths = ", ".join(str(path) for path in existing)
-        raise FileExistsError(
-            f"Incomplete label-history artifacts already exist: {paths}. "
-            "Use --overwrite after confirming regeneration."
-        )
+            cache = load_cache(cache_json)
+            baseline_cached = baseline_label_url is None or any(
+                same_url_path(baseline_label_url, url) for url in cache
+            )
+            if baseline_cached:
+                return LabelHistoryPaths(changelog_json, cache_json)
+            # A prior run (e.g. new-indication approval evidence) built this
+            # changelog without this baseline label. Extend the cache with the
+            # missing snapshot rather than reusing an incomplete history;
+            # already-cached label text is not re-fetched.
+        else:
+            paths = ", ".join(str(path) for path in existing)
+            raise FileExistsError(
+                f"Incomplete label-history artifacts already exist: {paths}. "
+                "Use --overwrite after confirming regeneration."
+            )
 
     build_changelog(
         brand_name=brand,

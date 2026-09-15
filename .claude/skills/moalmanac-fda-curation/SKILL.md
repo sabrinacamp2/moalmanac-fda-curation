@@ -7,8 +7,7 @@ description: Determine whether an FDA oncology application needs first-time cura
 
 Use the CLI for all extraction, matching, validation, proposal generation, and state
 changes. This skill coordinates those commands, routes from their outputs, presents
-review files, and obtains explicit curator decisions. Use a harness assessment only as
-an optional second check of curator-facing evidence.
+review files, and obtains explicit curator decisions.
 
 ## Protect source and generated output
 
@@ -58,8 +57,9 @@ separate brand-name lookup merely to name the directory.
 
 Read [references/review-formats.md](references/review-formats.md) when the selected
 branch produces curator-facing review files. Link the generated file prominently and
-do not reproduce its proposal or source evidence in chat. Use chat only for the link,
-a clearly labeled harness assessment, and numbered decision options.
+do not reproduce its proposal or source evidence in chat. Use chat for the link, a short
+statement of the decision being made, and numbered decision options. Give an opinion
+about the evidence only when the curator asks; read the review file before answering.
 
 Quote from a review file only to answer a specific curator question and identify it as
 a quotation. Say “Indications and Usage,” not “Section 1.” Distinguish curation
@@ -82,8 +82,7 @@ explanation at a curator boundary, before overwrite, or when scope or cost chang
 
 Stop when a command reports an unresolved condition or produces a curator-review file.
 Do not reproduce or independently reimplement the command's validation logic in the
-skill. If useful, add a clearly labeled harness assessment of the generated review
-evidence without treating it as pipeline state.
+skill.
 
 For changed indications, assemble revision output only after the curator resolves the
 revision screening, description, and label date and URL reviews. Report the assembled

@@ -29,10 +29,11 @@ Route from the command output:
 Do not ask the curator to review successful indication matches. Do not repeat document
 review or run new-entry assembly during an update session.
 
-## Review changes to existing indications
+## Screen possible changes to existing indications
 
-Tell the curator: “Now we'll see if any indications have changed in the newer label.”
-Then run:
+Tell the curator: “Now we'll screen the existing indications for changes in the newer
+label. The tool is intentionally sensitive to wording changes, so not every result will
+be meaningful enough to update. We'll decide which ones should move forward.” Then run:
 
 ```bash
 moalmanac-fda-curation find-revised-indications \
@@ -40,18 +41,19 @@ moalmanac-fda-curation find-revised-indications \
   --work-dir RUN_DIR
 ```
 
-Describe this as checking whether existing indications changed. The command owns the
-label-history and comparison mechanics and surfaces them only when it cannot complete
-the assessment.
+Describe the output as possible revisions that need a quick curator screening. The
+command owns the label-history and comparison mechanics and surfaces them only when it
+cannot complete the assessment.
 
 Route from the command output:
 
 - If it reports no changed matched indications, tell the curator and stop.
-- Present each revision-screening Markdown file one at a time. Ask whether to use the
-  latest-label proposal, edit it before use, keep the existing record, or leave the
-  candidate unresolved. Persist the answer with `record-decision --stage revision`
-  using `use_latest`, `keep_existing`, or `unresolved`; pass approved edits as overrides
-  with `use_latest`.
+- Present each revision-screening Markdown file one at a time. Explain that the tool
+  found a source-text difference and ask whether it is meaningful enough to continue
+  reviewing for a MOAlmanac update. If it is, ask whether to use or edit the latest-label
+  proposal. Otherwise, keep the existing record or leave the candidate unresolved.
+  Persist the answer with `record-decision --stage revision` using `use_latest`,
+  `keep_existing`, or `unresolved`; pass approved edits as overrides with `use_latest`.
 - Treat those values as internal command vocabulary. In curator-facing summaries, say
   that an existing indication will be updated using the newer label, left unchanged, or
   still needs a decision. After screening is complete, say: “You chose to update these
