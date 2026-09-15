@@ -16,9 +16,10 @@ Use this procedure only after the curation status reports `previously_curated: f
 
 ## Review vertically
 
-For one selected indication, review `indication.md`, `description.md`, and `approval.md`
-in sequence before moving to the next indication. Use the proposal's `review_label` as
-the heading; retain its numeric index only for tool calls and provenance.
+For one selected indication, link and review `indication.md`, `description.md`, and
+`approval.md` in sequence before moving to the next indication. Begin each new decision
+prompt with its review-file link. Use the proposal's `review_label` as the heading;
+retain its numeric index only for tool calls and provenance.
 
 Record a decision only after the curator explicitly accepts, edits, excludes, or marks
 the item unresolved. `record-decision` rebuilds the corresponding review file. After an

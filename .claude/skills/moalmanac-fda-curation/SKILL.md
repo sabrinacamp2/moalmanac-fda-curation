@@ -56,10 +56,11 @@ separate brand-name lookup merely to name the directory.
 ## Present source-backed review
 
 Read [references/review-formats.md](references/review-formats.md) when the selected
-branch produces curator-facing review files. Link the generated file prominently and
-do not reproduce its proposal or source evidence in chat. Use chat for the link, a short
-statement of the decision being made, and numbered decision options. Give an opinion
-about the evidence only when the curator asks; read the review file before answering.
+branch produces curator-facing review files. At every new curator decision boundary,
+begin the response with a clickable absolute-path link to the exact Markdown file being
+reviewed. Then give a short statement of the decision and numbered options. Do not
+reproduce the proposal or source evidence in chat. Give an opinion about the evidence
+only when the curator asks; read the review file before answering.
 
 Quote from a review file only to answer a specific curator question and identify it as
 a quotation. Say “Indications and Usage,” not “Section 1.” Distinguish curation

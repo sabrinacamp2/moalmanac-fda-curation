@@ -1,11 +1,12 @@
 # File-first curator review
 
 The curator-facing workflow commands generate canonical Markdown review files alongside
-their pipeline artifacts. Do not copy their contents into chat. Link to the relevant
-file, briefly state the decision the curator is making, and show the available actions.
-Do not add a routine assessment or recommendation. If the curator asks for an opinion,
-read the complete review file and answer the specific question without treating that
-opinion as pipeline state.
+their pipeline artifacts. Every new review prompt begins with a clickable absolute-path
+link to the exact Markdown file for that decision. Follow the link with a brief statement
+of the decision and the available actions. Do not copy the file contents into chat or
+add a routine assessment or recommendation. If the curator asks for an opinion, read the
+complete review file and answer the specific question without treating that opinion as
+pipeline state.
 
 Each review file presents the proposal first, followed by clearly labeled supporting
 context and evidence. Recorded curator edits and decisions appear after the evidence.
