@@ -205,5 +205,8 @@ This preserves existing IDs and writes complete revised document, label URL, and
 indication records plus targeted document and URL update artifacts under `reviewed/`.
 It refuses stale or unresolved review state.
 
+After either assembly command succeeds, report its reviewed artifact paths and record
+count, then end the curation session.
+
 After recording an edit, show only the resolved edited field/value from the rebuilt
 review packet in chat and obtain confirmation before continuing.

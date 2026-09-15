@@ -86,5 +86,5 @@ skill.
 
 For changed indications, assemble revision output only after the curator resolves the
 revision screening, description, and label date and URL reviews. Report the assembled
-output without adding another review step. Do not revise `moalmanac-db`, commit, push, or
-open a pull request without a separate explicit request.
+output without adding another review step. Finish the curation session by reporting the
+reviewed artifact paths and the number of records produced.

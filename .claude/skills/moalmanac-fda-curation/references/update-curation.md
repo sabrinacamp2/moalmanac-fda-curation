@@ -73,4 +73,5 @@ After description and label date and URL are resolved for every selected update,
 `assemble-revisions --database-dir MOALMANAC_DB_ROOT` and report the paths to the
 reviewed document, URL, indication, and targeted update artifacts. The
 curator already compared old and new values in the preceding reviews, so this finalization
-does not require another decision.
+does not require another decision. Reporting these artifacts completes the curation
+session.

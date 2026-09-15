@@ -91,6 +91,10 @@ it is meaningful enough to continue reviewing for a MOAlmanac update.
 
 ## Description review in chat
 
+State only whether the pipeline reports added Clinical Studies or Clinical Pharmacology
+detail. The curator still reviews every proposed description. Do not assess the proposal
+or say that nothing remains to review when no clinical detail was added.
+
 ```markdown
 [Open the description review](<absolute-path-to-review/indications/<slug>/description.md>)
 
