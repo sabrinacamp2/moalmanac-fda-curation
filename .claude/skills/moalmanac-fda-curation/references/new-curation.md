@@ -16,9 +16,10 @@ Use this procedure only after the curation status reports `previously_curated: f
 
 ## Review vertically
 
-For one selected indication, review `indication.md`, `description.md`, and `approval.md`
-in sequence before moving to the next indication. Use the proposal's `review_label` as
-the heading; retain its numeric index only for tool calls and provenance.
+For one selected indication, link and review `indication.md`, `description.md`, and
+`approval.md` in sequence before moving to the next indication. Begin each new decision
+prompt with its review-file link. Use the proposal's `review_label` as the heading;
+retain its numeric index only for tool calls and provenance.
 
 Record a decision only after the curator explicitly accepts, edits, excludes, or marks
 the item unresolved. `record-decision` rebuilds the corresponding review file. After an
@@ -27,18 +28,16 @@ correct it, record the replacement and confirm again.
 
 Keep supported batch operations batched. Do not insert curator confirmation between
 internal stages when no review occurs. Run `assemble-reviewed` only when every retained
-indication has complete explicit decisions.
+indication has complete explicit decisions. After assembly, report the reviewed document
+and indication artifact paths and the number of indications produced. This completes the
+curation session.
 
-## Assess descriptions
+## Review descriptions
 
-Read [review-standards.md](review-standards.md). Assess only detail added from Clinical
-Studies or Clinical Pharmacology. Other wording differences between description and
-indication are intentional editorial transformations owned by the description prompt.
-
-For added clinical detail, assess whether it resolves a real ambiguity, is supported by
-the selected source, and avoids irrelevant trial design, population, endpoint, or
-efficacy information. Recommend removal when it does not clarify the approval, but do
-not apply that recommendation without explicit curator approval.
+Link `description.md` and ask the curator to accept, edit, use indication-only wording,
+inspect more evidence, or ask a question. State whether the pipeline reports added detail
+from Clinical Studies or Clinical Pharmacology, but do not assess that detail or
+recommend an action unless the curator asks for an opinion.
 
 Ensure `description.md` and `approval.md` repeat the current curator-reviewed indication
 near the top. Read [moalmanac-examples.md](moalmanac-examples.md) only when checking final

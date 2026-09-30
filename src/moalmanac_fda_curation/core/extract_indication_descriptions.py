@@ -578,29 +578,29 @@ Requirements for the description field:
 - Use HGVS-style prefixes for variant names only when the correct prefix is clear from the input.
 - Use American English and include the Oxford comma.
 - Supporting label sections may be included as `clinical_pharmacology` and `clinical_studies`, but may be omitted when too large.
-- Use `clinical_pharmacology` only to clarify ambiguous biomarker definitions directly relevant to the indication.
-- If the indication depends on a susceptible biomarker, variant class, or treatment-selection criterion that is defined in `clinical_pharmacology`, include that concise definition when it is needed to make the description self-contained.
-- Treat included `clinical_studies` text as a likely relevant clinical-studies excerpt for this indication, selected from the broader label before this prompt was built.
-- Use the selected `clinical_studies` excerpt to clarify the trial basis, regimen, disease subgroup, biomarker context, or therapeutic details for the indication.
-- If the indication contains a broad treatment class or regimen term, use the selected `clinical_studies` excerpt to identify the specific drugs or regimen components when the mapping is clear.
-- When `clinical_studies` maps a broad treatment class or regimen term to specific drugs, include those specific drugs in the supporting sentence; do not stop at naming the trial alone.
-- When `clinical_studies` defines the specific drugs or regimen components included under a broad regimen term in the indication, include those components even if they appear as trial treatment details, unless doing so would conflict with the approved indication.
-- When the specific drugs differ by patient subgroup, disease histology, or disease subtype, include that mapping if it is directly relevant to the indication.
-- When the selected `clinical_studies` excerpt clearly identifies the supporting trial by name or NCT number, include that trial identifier in the concise supporting sentence.
-- When the selected `clinical_studies` excerpt clearly identifies the supporting trial phase or study design, such as phase 1/2, phase 2, phase 3, randomized, open-label, double-blind, single-arm, multicohort, or placebo-controlled, include those details in the concise supporting sentence.
-- Preserve clinically meaningful qualifiers that determine which specific regimen applies to which patient subgroup. Omit dose amounts and schedules when possible.
-- When using `clinical_studies`, add at most one concise sentence and avoid eligibility criteria, endpoints, and efficacy results.
-- If the selected `clinical_studies` excerpt still does not clearly support or clarify this indication, draft from the indication only.
+- Only add detail from `clinical_pharmacology` or `clinical_studies` to resolve one of two ambiguity types already present in the indication text, and no other reason:
+  (a) a combination therapy or regimen named as a class or generic term (for example "chemotherapy" or "platinum-based chemotherapy") whose specific component drugs are not stated in the indication; or
+  (b) a biomarker, genomic alteration, or receptor-status criterion named as a class term (for example "HRR gene-mutated" or "susceptible NPM1 mutation") whose specific qualifying definition is not stated in the indication.
+- Before adding anything, identify the exact word or phrase in the indication text that falls into ambiguity type (a) or (b) above. If no such phrase exists, add nothing from `clinical_pharmacology` or `clinical_studies`, regardless of what trial name, phase, study design, or dosing information is available in the excerpt — none of those are themselves a reason to add a sentence.
+- When ambiguity type (a) or (b) is present, resolve it with the specific drug names, regimen components, or biomarker definition from the excerpt. When the specific drugs, regimen components, or biomarker definition differ by patient subgroup, disease histology, or disease subtype, include that mapping if it is directly relevant to the indication.
+- You may introduce that disambiguating content with a short framing clause naming the supporting trial (name and/or NCT number) and, when known, its phase or study design (such as phase 1/2, phase 2, phase 3, randomized, open-label, double-blind, single-arm, multicohort, or placebo-controlled) — for example "This indication is based on Study X (NCT...), a phase 3, randomized, open-label study in which ...". Never state a trial name, NCT number, phase, or study design as a sentence on its own without the disambiguating drug names or biomarker definition in the same sentence.
+- Reserve "This indication is based on Study X" framing for a trial the label text itself credits with establishing the indication's effectiveness (for example, a trial named in an "effectiveness ... is supported by" or "effectiveness ... has been established" sentence). If the disambiguating drug names, regimen components, or biomarker definition instead come from a different trial in the excerpt — such as one described only as demonstrating comparability, pharmacokinetics, bridging, or safety for a reformulated or biosimilar product — name that trial as the source of the regimen or biomarker detail without saying the indication is "based on" it, for example "Regimens in Study Y (NCT...) included ..." rather than "This indication is based on Study Y (NCT...)".
+- Omit dose amounts and schedules, eligibility criteria, endpoints, and efficacy results. None of these disambiguate ambiguity type (a) or (b), so they are never the added content.
+- Add at most one concise added sentence.
+- If the selected `clinical_studies` or `clinical_pharmacology` excerpt does not contain a fact that resolves ambiguity type (a) or (b), draft from the indication only and set clinical_detail_used to false.
 - Do not invent trial names, biomarkers, dates, or regulatory details.
 - Do not mention source line numbers or provenance metadata in the description.
 
 Also return review metadata:
 - clinical_detail_used: true only when the description adds information from Clinical
-  Studies beyond a direct reformulation of the indication.
+  Studies or Clinical Pharmacology to resolve ambiguity type (a) or (b) above.
 - clinical_detail_text: the exact added sentence or phrase, or null when no Clinical
   Studies detail was used.
-- clinical_detail_purpose: one concise sentence explaining which ambiguity the added
-  detail resolves, or null when no Clinical Studies detail was used.
+- clinical_detail_purpose: quote the exact word or phrase from the indication text
+  that names the combination-therapy class or biomarker class being resolved, or null
+  when no Clinical Studies detail was used. A purpose that only restates what the
+  added sentence contains (for example "identifies the trial name and dosing regimen")
+  is invalid; it must name the ambiguous phrase being resolved.
 
 Structured input:
 {json.dumps(prompt_input, indent=2)}
