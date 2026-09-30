@@ -173,7 +173,16 @@ def get_drug_and_company_fields(
     company_override: str | None = None,
 ) -> dict[str, str]:
     """Prepare brand, generic, and company display fields."""
-    openfda = fda_record["openfda"]
+    openfda = fda_record.get("openfda") or {}
+    if not openfda.get("brand_name") or not openfda.get("generic_name"):
+        application_number = fda_record.get("application_number", "<unknown>")
+        raise ValueError(
+            f"drug/drugsfda record for {application_number} has no openfda "
+            "brand_name/generic_name (openFDA's SPL-to-application linkage did "
+            "not populate for this record). This tool has no supported fallback "
+            "for deriving normalized brand/generic names from another field; "
+            "curate this application manually."
+        )
 
     brand = openfda["brand_name"][0].title()
     generic = openfda["generic_name"][0].lower()
