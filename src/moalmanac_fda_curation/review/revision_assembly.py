@@ -48,6 +48,102 @@ def assemble_document_updates(
     )
 
 
+def has_use_latest_target(targets_payload: dict[str, Any], decisions: dict[str, Any]) -> bool:
+    """Report whether any revision target was screened to use the latest label."""
+    for target in targets_payload.get("targets") or []:
+        index = target["latest_indication_index"]
+        stages = decisions.get("indications", {}).get(str(index), {})
+        if (stages.get("revision") or {}).get("decision") == "use_latest":
+            return True
+    return False
+
+
+def has_accepted_new_candidate(
+    new_candidates: list[dict[str, Any]], decisions: dict[str, Any]
+) -> bool:
+    """Report whether any newly discovered indication was accepted or edited."""
+    for candidate in new_candidates:
+        index = candidate["latest_indication_index"]
+        stages = decisions.get("indications", {}).get(str(index), {})
+        if (stages.get("indication") or {}).get("decision") in {"accepted", "edited"}:
+            return True
+    return False
+
+
+def assemble_new_indications(
+    new_candidates: list[dict[str, Any]],
+    indication_payload: dict[str, Any],
+    description_payload: dict[str, Any],
+    date_matches: list[dict[str, Any]],
+    decisions: dict[str, Any],
+    document_id: str,
+    existing_indications: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build finished records for indications newly discovered this session.
+
+    Assigns fresh sequential IDs rather than reusing the latest label's own
+    positional index, which may already be taken by an existing indication ID
+    for this document (indexes are per-label, not stable across label
+    revisions).
+    """
+    indications = indication_payload.get("indications") or []
+    descriptions = indexed(description_payload.get("indications") or [], "description")
+    dates = indexed(date_matches, "date match")
+    prefix = document_id.replace("doc:", "ind:", 1)
+    used_indexes = [
+        int(str(existing["id"]).rsplit(":", 1)[-1])
+        for existing in existing_indications
+        if existing.get("document_id") == document_id
+        and str(existing.get("id", "")).rsplit(":", 1)[-1].isdigit()
+    ]
+    next_index = max(used_indexes, default=-1) + 1
+
+    outputs = []
+    for candidate in new_candidates:
+        index = candidate["latest_indication_index"]
+        stages = decisions.get("indications", {}).get(str(index), {})
+        indication_decision = stages.get("indication")
+        if not indication_decision or indication_decision.get("decision") == "excluded":
+            continue
+        indication_decision = accepted_entry(indication_decision, f"indication {index}")
+        description_decision = accepted_entry(
+            stages.get("description"), f"indication {index} description"
+        )
+        approval_decision = accepted_entry(
+            stages.get("approval"), f"indication {index} label date and URL"
+        )
+        if index >= len(indications) or index not in descriptions or index not in dates:
+            raise ValueError(f"New indication {index} is missing prepared curation evidence")
+
+        indication = copy.deepcopy(indications[index])
+        indication.update(indication_decision.get("overrides") or {})
+        description = copy.deepcopy(descriptions[index])
+        description.update(description_decision.get("overrides") or {})
+        date_match = copy.deepcopy(dates[index])
+        event = (date_match.get("verification") or {}).get("matched_event") or {}
+        if not (date_match.get("verification") or {}).get("verified") or not event:
+            raise ValueError(f"Label date and URL for indication {index} are not verified")
+        approval = {
+            "initial_approval_date": event.get("date"),
+            "initial_approval_url": event.get("label_url"),
+        }
+        approval.update(approval_decision.get("overrides") or {})
+        outputs.append(
+            {
+                "id": f"{prefix}:{next_index}",
+                "document_id": document_id,
+                "indication": indication.get("indication"),
+                **approval,
+                "description": description.get("description"),
+                "raw_biomarkers": indication.get("raw_biomarkers"),
+                "raw_cancer_type": indication.get("raw_cancer_type"),
+                "raw_therapeutics": indication.get("raw_therapeutics"),
+            }
+        )
+        next_index += 1
+    return outputs
+
+
 def assemble_updated_indications(
     targets_payload: dict[str, Any],
     indication_payload: dict[str, Any],
@@ -128,6 +224,7 @@ def main() -> int:
     reviewed_dir = work_dir / "reviewed"
     outputs = {
         "indications": reviewed_dir / "revised-indications.json",
+        "new_indications": reviewed_dir / "new-indications.json",
         "document_patch": reviewed_dir / "document-update.json",
         "document": reviewed_dir / "revised-document.json",
         "url_patch": reviewed_dir / "url-update.json",
@@ -142,25 +239,56 @@ def main() -> int:
     targets = load_json_object(intermediate / "revision-targets.json", "Revision targets")
     decisions = load_decisions(work_dir / "review" / "decisions.json")
     verify_decision_sources(decisions)
-    revised = assemble_updated_indications(
-        targets,
-        load_json_object(
-            one_file(intermediate, "*-claude_chunked_indication_fields.json", "indication fields"),
-            "Indication fields",
-        ),
-        load_json_object(
+    indication_fields = load_json_object(
+        one_file(intermediate, "*-claude_chunked_indication_fields.json", "indication fields"),
+        "Indication fields",
+    )
+
+    if has_use_latest_target(targets, decisions):
+        revision_descriptions = load_json_object(
             intermediate / "selected-revision-description-proposals.json",
             "Revision descriptions",
-        ),
-        load_json_list(
+        )
+        revision_dates = load_json_list(
             intermediate / "selected-revision-date-evidence.json",
             "Revision dates",
-        ),
-        decisions,
+        )
+    else:
+        revision_descriptions = {"indications": []}
+        revision_dates = []
+    revised = assemble_updated_indications(
+        targets, indication_fields, revision_descriptions, revision_dates, decisions
     )
+
+    match_payload = load_json_object(
+        intermediate / "indication-matches.json", "Indication reconciliation artifact"
+    )
+    new_candidates = match_payload.get("new_indication_candidates") or []
     database_dir = args.database_dir.resolve() / "referenced"
     documents = load_json_list(database_dir / "documents.json", "Documents")
     urls = load_json_list(database_dir / "urls.json", "URLs")
+
+    if new_candidates and has_accepted_new_candidate(new_candidates, decisions):
+        new_descriptions = load_json_object(
+            intermediate / "selected-description-proposals.json",
+            "New indication descriptions",
+        )
+        new_dates = load_json_list(
+            intermediate / "selected-approval-evidence.json", "New indication dates"
+        )
+    else:
+        new_descriptions = {"indications": []}
+        new_dates = []
+    existing_indications = load_json_list(database_dir / "indications.json", "Indications")
+    new_indications = assemble_new_indications(
+        new_candidates,
+        indication_fields,
+        new_descriptions,
+        new_dates,
+        decisions,
+        document_id=targets["document_id"],
+        existing_indications=existing_indications,
+    )
     latest_document = load_json_object(
         intermediate / "document.proposal.json", "Latest document proposal"
     )
@@ -178,6 +306,7 @@ def main() -> int:
     )
     for key, payload in (
         ("indications", revised),
+        ("new_indications", new_indications),
         ("document_patch", document_patch),
         ("document", revised_document),
         ("url_patch", url_patch),
@@ -186,6 +315,7 @@ def main() -> int:
         write_json_atomic(outputs[key], payload)
         print(f"Wrote {outputs[key]}")
     print(f"Assembled {len(revised)} revised indications")
+    print(f"Assembled {len(new_indications)} new indications")
     return 0
 
 

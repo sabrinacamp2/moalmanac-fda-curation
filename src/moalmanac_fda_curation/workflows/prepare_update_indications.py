@@ -105,7 +105,7 @@ def new_indication_review_markdown(
     candidates: list[dict[str, Any]],
     *,
     label_markdown_path: Path,
-    curated_label_pdf_path: Path,
+    latest_label_pdf_path: Path,
     reconciliation_path: Path,
 ) -> str:
     """Create a compact verification surface for unmatched label indications."""
@@ -139,8 +139,8 @@ def new_indication_review_markdown(
             "",
             "## Review sources",
             "",
-            f"- [Previous curated label — {preflight['curated_label_date']}](<{curated_label_pdf_path}>)",
-            f"- [Latest label — {preflight['latest_label_date']}](<{label_markdown_path}>)",
+            f"- [Latest label PDF — {preflight['latest_label_date']}](<{latest_label_pdf_path}>)",
+            f"- [Latest label Markdown — {preflight['latest_label_date']}](<{label_markdown_path}>)",
             f"- [Indication matching details](<{reconciliation_path}>)",
             "",
         ]
@@ -447,7 +447,7 @@ def main() -> int:
             groups["new"],
             new_candidates,
             label_markdown_path=work_dir / "labels" / f"{stem}.md",
-            curated_label_pdf_path=curated_label_pdf,
+            latest_label_pdf_path=local_label_paths[preflight["latest_label_url"]],
             reconciliation_path=reconciliation_path,
         )
         if new_review_path.exists() and not args.overwrite:

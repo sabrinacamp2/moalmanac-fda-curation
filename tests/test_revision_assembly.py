@@ -9,6 +9,7 @@ from unittest.mock import patch
 from moalmanac_fda_curation.review import revision_assembly
 from moalmanac_fda_curation.review.revision_assembly import (
     assemble_document_updates,
+    assemble_new_indications,
     assemble_updated_indications,
 )
 
@@ -48,10 +49,10 @@ class RevisionAssemblyTest(unittest.TestCase):
             (intermediate / "Example-claude_chunked_indication_fields.json").write_text(
                 json.dumps({"indications": []})
             )
-            (intermediate / "selected-revision-description-proposals.json").write_text(
-                json.dumps({"indications": []})
+            (intermediate / "indication-matches.json").write_text(
+                json.dumps({"new_indication_candidates": []})
             )
-            (intermediate / "selected-revision-date-evidence.json").write_text("[]")
+            (database / "indications.json").write_text("[]")
             (review / "decisions.json").write_text(json.dumps({
                 "schema_version": 1,
                 "document": {},
@@ -74,6 +75,102 @@ class RevisionAssemblyTest(unittest.TestCase):
                 json.loads((reviewed / "revised-url.json").read_text())["url"],
                 "https://example.test/latest.pdf",
             )
+            self.assertEqual(
+                json.loads((reviewed / "new-indications.json").read_text()), []
+            )
+
+    def test_cli_assembles_new_indication_with_no_selected_revisions(self) -> None:
+        """Regression test: assemble-revisions must not require revision-only
+        artifacts (selected-revision-description-proposals.json etc.) when no
+        existing indication was screened to use_latest, and must still assemble
+        an accepted newly discovered indication using a fresh, non-colliding ID.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            work = root / "run"
+            intermediate = work / "intermediate"
+            review = work / "review"
+            database = root / "database" / "referenced"
+            for path in (intermediate, review, database):
+                path.mkdir(parents=True)
+            existing_document = {
+                "id": "doc:fda.example",
+                "publication_date": "2024-01-01",
+                "description": "Old citation",
+                "urls": ["url:fda.example:label"],
+            }
+            latest_document = {
+                "id": "doc:fda.example",
+                "publication_date": "2026-01-02",
+                "description": "New citation",
+                "urls": ["https://example.test/latest.pdf"],
+            }
+            (database / "documents.json").write_text(json.dumps([existing_document]))
+            (database / "urls.json").write_text(json.dumps([{
+                "id": "url:fda.example:label",
+                "url": "https://example.test/old.pdf",
+            }]))
+            (database / "indications.json").write_text(json.dumps([
+                {"id": "ind:fda.example:0", "document_id": "doc:fda.example"},
+                {"id": "ind:fda.example:1", "document_id": "doc:fda.example"},
+            ]))
+            (intermediate / "document.proposal.json").write_text(json.dumps(latest_document))
+            (intermediate / "revision-targets.json").write_text(json.dumps({
+                "document_id": "doc:fda.example",
+                "targets": [],
+            }))
+            (intermediate / "Example-claude_chunked_indication_fields.json").write_text(
+                json.dumps({"indications": [{
+                    "indication": "New indication wording.",
+                    "raw_biomarkers": "HER2-positive",
+                    "raw_cancer_type": "metastatic breast cancer",
+                    "raw_therapeutics": "Example",
+                }]})
+            )
+            (intermediate / "indication-matches.json").write_text(json.dumps({
+                "new_indication_candidates": [{
+                    "latest_indication_index": 0,
+                    "review_label": "HER2-positive metastatic breast cancer",
+                }],
+            }))
+            (intermediate / "selected-description-proposals.json").write_text(json.dumps({
+                "indications": [{
+                    "indication_index": 0,
+                    "description": "New description.",
+                }],
+            }))
+            (intermediate / "selected-approval-evidence.json").write_text(json.dumps([{
+                "indication_index": 0,
+                "verification": {
+                    "verified": True,
+                    "matched_event": {
+                        "date": "2026-01-02",
+                        "label_url": "https://example.test/new.pdf",
+                    },
+                },
+            }]))
+            (review / "decisions.json").write_text(json.dumps({
+                "schema_version": 1,
+                "document": {},
+                "indications": {"0": {
+                    "indication": {"decision": "accepted", "overrides": {}},
+                    "description": {"decision": "accepted", "overrides": {}},
+                    "approval": {"decision": "accepted", "overrides": {}},
+                }},
+            }))
+            argv = [
+                "assemble-revisions",
+                "--work-dir", str(work),
+                "--database-dir", str(root / "database"),
+            ]
+            with patch("sys.argv", argv):
+                self.assertEqual(revision_assembly.main(), 0)
+            new_indications = json.loads(
+                (work / "reviewed" / "new-indications.json").read_text()
+            )
+            self.assertEqual(len(new_indications), 1)
+            self.assertEqual(new_indications[0]["id"], "ind:fda.example:2")
+            self.assertEqual(new_indications[0]["indication"], "New indication wording.")
 
     def test_document_update_changes_only_allow_list_and_label_url(self) -> None:
         existing = {
@@ -217,6 +314,109 @@ class RevisionAssemblyTest(unittest.TestCase):
             ),
             [],
         )
+
+
+class AssembleNewIndicationsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.new_candidates = [{
+            "latest_indication_index": 3,
+            "review_label": "New subtype",
+        }]
+        self.indications = {"indications": [
+            None, None, None,
+            {
+                "indication": "New indication wording.",
+                "raw_biomarkers": "HER2-positive",
+                "raw_cancer_type": "metastatic breast cancer",
+                "raw_therapeutics": "Example",
+            },
+        ]}
+        self.descriptions = {"indications": [{
+            "indication_index": 3,
+            "description": "New description.",
+        }]}
+        self.dates = [{
+            "indication_index": 3,
+            "verification": {
+                "verified": True,
+                "matched_event": {
+                    "date": "2026-01-02",
+                    "label_url": "https://example.test/new.pdf",
+                },
+            },
+        }]
+        self.decisions = {
+            "indications": {"3": {
+                "indication": {"decision": "accepted", "overrides": {}},
+                "description": {"decision": "accepted", "overrides": {}},
+                "approval": {"decision": "accepted", "overrides": {}},
+            }},
+        }
+        # Existing indications for this document already occupy IDs 0-3, which
+        # collide with the latest label's own positional index (3) for the new
+        # candidate -- the assembler must not reuse that index verbatim.
+        self.existing_indications = [
+            {"id": f"ind:fda.example:{i}", "document_id": "doc:fda.example"}
+            for i in range(4)
+        ]
+
+    def test_new_indication_gets_fresh_non_colliding_id(self) -> None:
+        result = assemble_new_indications(
+            self.new_candidates,
+            self.indications,
+            self.descriptions,
+            self.dates,
+            self.decisions,
+            document_id="doc:fda.example",
+            existing_indications=self.existing_indications,
+        )
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["id"], "ind:fda.example:4")
+        self.assertEqual(result[0]["indication"], "New indication wording.")
+        self.assertEqual(result[0]["initial_approval_date"], "2026-01-02")
+
+    def test_unresolved_new_candidate_is_omitted(self) -> None:
+        self.decisions["indications"] = {}
+        self.assertEqual(
+            assemble_new_indications(
+                self.new_candidates,
+                self.indications,
+                self.descriptions,
+                self.dates,
+                self.decisions,
+                document_id="doc:fda.example",
+                existing_indications=self.existing_indications,
+            ),
+            [],
+        )
+
+    def test_excluded_new_candidate_is_omitted(self) -> None:
+        self.decisions["indications"]["3"]["indication"]["decision"] = "excluded"
+        self.assertEqual(
+            assemble_new_indications(
+                self.new_candidates,
+                self.indications,
+                self.descriptions,
+                self.dates,
+                self.decisions,
+                document_id="doc:fda.example",
+                existing_indications=self.existing_indications,
+            ),
+            [],
+        )
+
+    def test_incomplete_decision_raises(self) -> None:
+        del self.decisions["indications"]["3"]["approval"]
+        with self.assertRaisesRegex(ValueError, "label date and URL"):
+            assemble_new_indications(
+                self.new_candidates,
+                self.indications,
+                self.descriptions,
+                self.dates,
+                self.decisions,
+                document_id="doc:fda.example",
+                existing_indications=self.existing_indications,
+            )
 
 
 if __name__ == "__main__":

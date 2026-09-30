@@ -508,14 +508,19 @@ class UpdateCliTest(unittest.TestCase):
             mappings,
             [],
             label_markdown_path=Path("/tmp/label.md"),
-            curated_label_pdf_path=Path("/tmp/curated-label.pdf"),
+            latest_label_pdf_path=Path("/tmp/latest-label.pdf"),
             reconciliation_path=Path("/tmp/reconciliation.json"),
         )
         self.assertIn("## 2 — Advanced RCC", markdown)
         self.assertIn("- Biomarker: none", markdown)
         self.assertIn("> AFINITOR is indicated for advanced RCC.", markdown)
-        self.assertIn("[Previous curated label — 2022-02-01]", markdown)
-        self.assertIn("[Latest label — 2026-06-01](</tmp/label.md>)", markdown)
+        self.assertIn(
+            "[Latest label PDF — 2026-06-01](</tmp/latest-label.pdf>)", markdown
+        )
+        self.assertIn(
+            "[Latest label Markdown — 2026-06-01](</tmp/label.md>)", markdown
+        )
+        self.assertNotIn("Previous curated label", markdown)
         self.assertIn("[Indication matching details]", markdown)
         self.assertNotIn("Source chunk", markdown)
         self.assertNotIn("Match assessment", markdown)
