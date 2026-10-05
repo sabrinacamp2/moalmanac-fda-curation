@@ -9,15 +9,15 @@ from ..core.artifacts import load_json_object, write_json_atomic
 from ..core.identify_new_indications import (
     DEFAULT_MODEL,
     indexed_latest_indications,
-    load_existing_indications,
     map_existing_to_latest_indications,
     select_new_indication_candidates,
 )
+from ..core.moalmanac_records import load_existing_indications, require_database
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--existing-indications-json", type=Path, required=True)
+    parser.add_argument("--database-dir", type=Path, required=True)
     parser.add_argument("--document-id", required=True)
     parser.add_argument("--latest-indications-json", type=Path, required=True)
     parser.add_argument("--output-json", type=Path, required=True)
@@ -34,7 +34,7 @@ def main() -> int:
     if output_path.exists() and not args.overwrite:
         raise FileExistsError(f"Reconciliation artifact already exists: {output_path}")
     existing = load_existing_indications(
-        args.existing_indications_json.resolve(), args.document_id
+        require_database(args.database_dir), args.document_id
     )
     latest_payload = load_json_object(
         args.latest_indications_json.resolve(), "Latest indication artifact"

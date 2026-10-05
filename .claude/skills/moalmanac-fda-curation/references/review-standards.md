@@ -21,7 +21,7 @@ use openFDA text because its content may not correspond to the selected label da
 
 Preserve complete patient-selection criteria, regulatory qualifiers, combination
 partners, prior-treatment requirements, and companion diagnostic language. Keep
-`raw_biomarkers`, `raw_cancer_type`, and `raw_therapeutics` grounded in label text.
+`raw_biomarkers`, `raw_cancer_types`, and `raw_therapeutics` grounded in label text.
 Use `Brand (generic)` in `raw_therapeutics` for the label drug, without requiring
 that formatting in the indication sentence itself.
 
@@ -51,8 +51,8 @@ anything already stated in the indication text.
 
 When a disambiguating detail is warranted, keep the trial name or NCT number as a
 short framing clause around that detail rather than presenting the specifics as a
-bare fragment. See the EMA Libtayo (`ind:ema.libtayo:1`) and taletrectinib/Ibtrozi
-(`ind:fda.ibtrozi:0`) entries in `moalmanac-db/referenced/indications.json` for this
+bare fragment. See the EMA Libtayo (`ind:ema:libtayo:1`) and taletrectinib/Ibtrozi
+(`ind:fda:ibtrozi:0`) entries in `moalmanac-db/referenced/indications.json` for this
 pattern. Plain agency-attribution restatements of the indication (e.g. the Rozlytrek
 and Augtyro ROS1 entries) are correct when the indication text needs no
 disambiguation — do not add trial color to those by default.
@@ -76,6 +76,13 @@ rationale rather than asking the harness to independently repeat the full match.
 
 The changelog verifier confirms structural integrity of an LLM-selected event, not
 semantic correctness or earliest clinical equivalence.
+
+## Approval status review
+
+The proposed status is `Accelerated` when the reviewed indication text states that it
+is approved under accelerated approval, and `Approved` otherwise. Confirm it against the
+label's Indications and Usage section, because an accelerated-approval statement can sit
+in a shared paragraph outside the extracted indication text.
 
 ## Review and publication authority
 

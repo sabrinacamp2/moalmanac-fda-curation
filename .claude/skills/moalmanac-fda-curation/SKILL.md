@@ -86,6 +86,6 @@ Do not reproduce or independently reimplement the command's validation logic in 
 skill.
 
 For changed indications, assemble revision output only after the curator resolves the
-revision screening, description, and label date and URL reviews. Report the assembled
+revision screening, description, and approval date and status reviews. Report the assembled
 output without adding another review step. Finish the curation session by reporting the
 reviewed artifact paths and the number of records produced.

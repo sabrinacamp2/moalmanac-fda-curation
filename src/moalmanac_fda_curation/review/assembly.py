@@ -1,15 +1,31 @@
-"""Assemble curator-reviewed document.json and indication.json outputs."""
+"""Assemble curator-reviewed moalmanac-db records for a first-time FDA curation."""
 
 from __future__ import annotations
 
 import argparse
 import copy
 import json
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from .decisions import load_decisions, verify_decision_sources
-from ..core.artifacts import load_document_artifact, load_json_object, write_json_atomic
+from ..core.artifacts import load_document_proposal, load_json_object, write_json_atomic
+from ..core.moalmanac_records import (
+    DEFAULT_CURATOR_AGENT_ID,
+    FDA_AGENT_ID,
+    FDA_APPROVAL_CONTRIBUTIONS,
+    ContributionLedger,
+    approval_status,
+    indication_id,
+    indication_record,
+    initial_curation_description,
+    load_database,
+    require_known_agents,
+    require_unused_ids,
+    validate_approval,
+)
+from ..core.moalmanac_schemas import validate_records
 
 
 def load_json_list(path: Path, name: str) -> list[dict[str, Any]]:
@@ -31,140 +47,177 @@ def indexed(items: list[dict[str, Any]], name: str) -> dict[int, dict[str, Any]]
     return result
 
 
-def compile_indications(
-    document: dict[str, Any],
-    indication_payload: dict[str, Any],
-    description_payload: dict[str, Any],
-    date_matches: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Compile biomarker indications after all curator decisions are applied."""
-    indications = indication_payload.get("indications")
-    if not isinstance(indications, list) or not all(isinstance(item, dict) for item in indications):
-        raise ValueError("Indication fields artifact must contain an indications list")
-    descriptions = description_payload.get("indications")
-    if not isinstance(descriptions, list):
-        raise ValueError("Description artifact must contain an indications list")
-
-    description_by_index = indexed(descriptions, "description")
-    date_by_index = indexed(date_matches, "date match")
-    document_id = document.get("id")
-    if not isinstance(document_id, str) or not document_id.startswith("doc:"):
-        raise ValueError("Document id must be a doc:* string")
-    indication_prefix = document_id.replace("doc:", "ind:", 1)
-
-    output = []
-    for index, item in enumerate(indications):
-        if not item.get("raw_biomarkers"):
-            continue
-        if index not in description_by_index:
-            raise ValueError(f"Missing description for retained indication {index}")
-        if index not in date_by_index:
-            raise ValueError(f"Missing approval-date result for retained indication {index}")
-        verification = date_by_index[index].get("verification") or {}
-        matched_event = verification.get("matched_event") or {}
-        if not verification.get("verified") or not matched_event:
-            raise ValueError(f"Approval-date match for indication {index} is not verified")
-        output.append(
-            {
-                "id": f"{indication_prefix}:{index}",
-                "document_id": document_id,
-                "indication": item.get("indication"),
-                "initial_approval_date": matched_event.get("date"),
-                "initial_approval_url": matched_event.get("label_url"),
-                "description": description_by_index[index].get("description"),
-                "raw_biomarkers": item.get("raw_biomarkers"),
-                "raw_cancer_type": item.get("raw_cancer_type"),
-                "raw_therapeutics": item.get("raw_therapeutics"),
-            }
-        )
-    if not output:
-        raise ValueError("No indications passed reviewed assembly")
-    return output
-
 def accepted_entry(entry: dict[str, Any] | None, name: str) -> dict[str, Any]:
     if not entry or entry.get("decision") not in {"accepted", "edited"}:
         raise ValueError(f"Missing explicit accepted/edited decision for {name}")
     return entry
 
 
+def approval_proposal(
+    date_match: dict[str, Any] | None, indication_text: str | None
+) -> dict[str, Any]:
+    """Return the approval date and status the pipeline proposes for review."""
+    date_match = date_match or {}
+    match = date_match.get("llm_match") or date_match.get("materialized_match") or {}
+    event = (date_match.get("verification") or {}).get("matched_event") or {}
+    return {
+        "initial_approval_date": event.get("date") or match.get("approval_date_candidate"),
+        "status": approval_status(indication_text or ""),
+    }
+
+
+def reviewed_approval(
+    date_match: dict[str, Any] | None,
+    indication_text: str | None,
+    decision: dict[str, Any],
+    name: str,
+) -> dict[str, Any]:
+    """Apply an approval decision; a verified event or a curator-supplied date is required."""
+    overrides = decision.get("overrides") or {}
+    verification = (date_match or {}).get("verification") or {}
+    verified = bool(verification.get("verified") and verification.get("matched_event"))
+    if not verified and "initial_approval_date" not in overrides:
+        raise ValueError(f"Approval date for {name} is not verified")
+    approval = {**approval_proposal(date_match, indication_text), **overrides}
+    validate_approval(approval, name)
+    return approval
+
+
+def reviewed_values(
+    indication: dict[str, Any],
+    indication_overrides: dict[str, Any],
+    description: dict[str, Any],
+    description_overrides: dict[str, Any],
+) -> dict[str, Any]:
+    """Combine reviewed indication fields with the reviewed statement description."""
+    reviewed_indication = {**indication, **indication_overrides}
+    reviewed_description = {**description, **description_overrides}
+    return {
+        "indication": reviewed_indication.get("indication"),
+        "raw_biomarkers": reviewed_indication.get("raw_biomarkers"),
+        "raw_cancer_types": reviewed_indication.get("raw_cancer_types"),
+        "raw_therapeutics": reviewed_indication.get("raw_therapeutics"),
+        "statement_description": reviewed_description.get("statement_description"),
+    }
+
+
+def fda_approval_contribution(ledger: ContributionLedger, approval: dict[str, Any]) -> str:
+    return ledger.reference(
+        FDA_AGENT_ID,
+        approval["initial_approval_date"],
+        FDA_APPROVAL_CONTRIBUTIONS[approval["status"]],
+    )
+
+
 def assemble_reviewed(
-    document: dict[str, Any],
+    proposal: dict[str, Any],
     indication_payload: dict[str, Any],
     description_payload: dict[str, Any],
     date_matches: list[dict[str, Any]],
     decisions: dict[str, Any],
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    database: dict[str, list[dict[str, Any]]],
+    *,
+    curator_agent_id: str = DEFAULT_CURATOR_AGENT_ID,
+    contribution_date: str,
+    contribution_description: str | None = None,
+) -> dict[str, Any]:
+    """Apply explicit decisions and build the records a new FDA curation adds."""
     verify_decision_sources(decisions)
-    reviewed_document = copy.deepcopy(document)
-    document_decision = accepted_entry(decisions.get("document"), "document")
-    reviewed_document.update(document_decision.get("overrides") or {})
+    document = copy.deepcopy(proposal["document"])
+    document.update(accepted_entry(decisions.get("document"), "document").get("overrides") or {})
+    indications = indication_payload.get("indications")
+    if not isinstance(indications, list) or not all(isinstance(item, dict) for item in indications):
+        raise ValueError("Indication fields artifact must contain an indications list")
+    descriptions = indexed(description_payload.get("indications") or [], "description")
+    dates = indexed(date_matches, "date match")
 
-    reviewed_indications = copy.deepcopy(indication_payload)
-    reviewed_descriptions = copy.deepcopy(description_payload)
-    reviewed_dates = copy.deepcopy(date_matches)
-    retained_indexes: list[int] = []
-
-    for index, indication in enumerate(reviewed_indications.get("indications") or []):
-        stage_decisions = decisions.get("indications", {}).get(str(index), {})
-        indication_decision = stage_decisions.get("indication")
+    reviewed = []
+    for index, item in enumerate(indications):
+        stages = decisions.get("indications", {}).get(str(index), {})
+        indication_decision = stages.get("indication")
         if indication_decision and indication_decision.get("decision") == "excluded":
-            indication["raw_biomarkers"] = None
             continue
-        if not indication.get("raw_biomarkers") and not indication_decision:
+        if not indication_decision and not item.get("raw_biomarkers"):
             continue
-        indication_decision = accepted_entry(indication_decision, f"indication {index}")
-        description_decision = accepted_entry(
-            stage_decisions.get("description"), f"indication {index} description"
+        name = f"indication {index}"
+        indication_decision = accepted_entry(indication_decision, name)
+        description_decision = accepted_entry(stages.get("description"), f"{name} description")
+        approval_decision = accepted_entry(stages.get("approval"), f"{name} approval")
+        if index not in descriptions:
+            raise ValueError(f"Missing description for retained indication {index}")
+        if index not in dates:
+            raise ValueError(f"Missing approval-date result for retained indication {index}")
+        values = reviewed_values(
+            item,
+            indication_decision.get("overrides") or {},
+            descriptions[index],
+            description_decision.get("overrides") or {},
         )
-        approval_decision = accepted_entry(
-            stage_decisions.get("approval"), f"indication {index} approval"
-        )
-        indication.update(indication_decision.get("overrides") or {})
-        retained_indexes.append(index)
-
-        description_item = next(
-            (
-                item
-                for item in reviewed_descriptions.get("indications") or []
-                if item.get("indication_index") == index
-            ),
-            None,
-        )
-        if description_item is None:
-            raise ValueError(f"Missing generated description for indication {index}")
-        description_item.update(description_decision.get("overrides") or {})
-
-        date_item = next(
-            (item for item in reviewed_dates if item.get("indication_index") == index),
-            None,
-        )
-        if date_item is None:
-            raise ValueError(f"Missing generated approval match for indication {index}")
-        approval_overrides = approval_decision.get("overrides") or {}
-        if approval_overrides:
-            verification = date_item.setdefault("verification", {})
-            matched_event = verification.setdefault("matched_event", {})
-            if "initial_approval_date" in approval_overrides:
-                matched_event["date"] = approval_overrides["initial_approval_date"]
-            if "initial_approval_url" in approval_overrides:
-                matched_event["label_url"] = approval_overrides["initial_approval_url"]
-            verification["curator_overridden"] = True
-            verification["verified"] = True
-
-    if not retained_indexes:
+        approval = reviewed_approval(dates[index], values["indication"], approval_decision, name)
+        reviewed.append((values, approval))
+    if not reviewed:
         raise ValueError("No indications have completed curator review")
-    compiled = compile_indications(
-        reviewed_document,
-        reviewed_indications,
-        reviewed_descriptions,
-        reviewed_dates,
+
+    ledger = ContributionLedger(database["contributions"])
+    curator_contribution = ledger.reference(
+        curator_agent_id,
+        contribution_date,
+        contribution_description or initial_curation_description(document),
     )
-    return reviewed_document, compiled
+    records = [
+        indication_record(
+            record_id=indication_id(document["id"], number),
+            document_id=document["id"],
+            values=values,
+            status=approval["status"],
+            contributions=ledger.ordered(
+                [curator_contribution, fda_approval_contribution(ledger, approval)]
+            ),
+        )
+        for number, (values, approval) in enumerate(reviewed)
+    ]
+    urls = copy.deepcopy(proposal["urls"])
+    require_unused_ids([document], database["documents"], "documents")
+    require_unused_ids(urls, database["urls"], "urls")
+    require_unused_ids(records, database["indications"], "indications")
+    require_known_agents(
+        [document["agent_id"], curator_agent_id, FDA_AGENT_ID], database["agents"]
+    )
+    return {
+        "document": document,
+        "urls": urls,
+        "indications": records,
+        "contributions": ledger.new_records,
+    }
+
+
+def add_contribution_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the options that describe this session's curator contribution."""
+    parser.add_argument(
+        "--curator-agent-id",
+        default=DEFAULT_CURATOR_AGENT_ID,
+        help="moalmanac-db agent credited with this curation.",
+    )
+    parser.add_argument(
+        "--contribution-date",
+        type=lambda value: datetime.strptime(value, "%Y-%m-%d").date().isoformat(),
+        default=date.today().isoformat(),
+        help="Date of the curator contribution, YYYY-MM-DD. Defaults to today.",
+    )
+    parser.add_argument(
+        "--contribution-description",
+        help=(
+            "Curator-supplied contribution text. Defaults to an initial-curation summary "
+            "for new indications and a revised-curation summary for replacements."
+        ),
+    )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work-dir", type=Path, required=True)
+    parser.add_argument("--database-dir", type=Path, required=True)
+    add_contribution_arguments(parser)
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -181,18 +234,23 @@ def one_file(directory: Path, pattern: str, name: str) -> Path:
 def main() -> int:
     args = parse_args()
     work_dir = args.work_dir.resolve()
+    database_dir = args.database_dir.resolve()
     intermediate = work_dir / "intermediate"
     output_dir = work_dir / "reviewed"
-    document_output = output_dir / "document.json"
-    indication_output = output_dir / "indication.json"
-    existing = [path for path in (document_output, indication_output) if path.exists()]
+    outputs = {
+        "document": output_dir / "document.json",
+        "urls": output_dir / "urls.json",
+        "indications": output_dir / "indication.json",
+        "contributions": output_dir / "contributions.json",
+    }
+    existing = [path for path in outputs.values() if path.exists()]
     if existing and not args.overwrite:
         raise FileExistsError(
             "Reviewed output already exists. Use --overwrite only after curator approval: "
             + ", ".join(str(path) for path in existing)
         )
-    reviewed_document, reviewed_indications = assemble_reviewed(
-        document=load_document_artifact(intermediate / "document.proposal.json"),
+    assembled = assemble_reviewed(
+        proposal=load_document_proposal(intermediate / "document.proposal.json"),
         indication_payload=load_json_object(
             one_file(
                 intermediate,
@@ -208,11 +266,24 @@ def main() -> int:
             intermediate / "selected-approval-evidence.json", "Date matches"
         ),
         decisions=load_decisions(work_dir / "review" / "decisions.json"),
+        database=load_database(database_dir),
+        curator_agent_id=args.curator_agent_id,
+        contribution_date=args.contribution_date,
+        contribution_description=args.contribution_description,
     )
-    write_json_atomic(document_output, reviewed_document)
-    write_json_atomic(indication_output, reviewed_indications)
-    print(f"Wrote {document_output}")
-    print(f"Wrote {indication_output} ({len(reviewed_indications)} indications)")
+    validate_records(
+        database_dir,
+        {
+            "documents": [assembled["document"]],
+            "urls": assembled["urls"],
+            "indications": assembled["indications"],
+            "contributions": assembled["contributions"],
+        },
+    )
+    for key, path in outputs.items():
+        write_json_atomic(path, assembled[key])
+        count = f" ({len(assembled[key])} records)" if isinstance(assembled[key], list) else ""
+        print(f"Wrote {path}{count}")
     return 0
 
 

@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from ..core.artifacts import load_json_object, write_json_atomic
-from ..core.identify_new_indications import load_existing_indications
 from ..core.identify_revised_indications import DEFAULT_MODEL as ASSESSMENT_MODEL
 from ..core.identify_revised_indications import (
     build_section_diff_hunks,
     identify_revised_indications,
     load_section_pair_from_cache,
 )
+from ..core.moalmanac_records import load_existing_indications, require_database
 from .prepare_label_history import prepare_label_history
 
 
@@ -56,7 +56,7 @@ def revision_targets(
                 "existing_indication": item["existing_indication"],
                 "review_label": (
                     (mapping.get("latest_indication") or {}).get("review_label")
-                    or (mapping.get("latest_indication") or {}).get("raw_cancer_type")
+                    or (mapping.get("latest_indication") or {}).get("raw_cancer_types")
                     or f"Indication {mapping['latest_indication_index']}"
                 ),
                 "label_change_ids": item.get("relevant_hunk_ids") or [],
@@ -78,11 +78,7 @@ def main() -> int:
     if not status.get("newer_label_available"):
         raise ValueError("Revision review requires a newer approved FDA label")
 
-    indications_path = args.database_dir.resolve() / "referenced" / "indications.json"
-    if not indications_path.is_file():
-        raise FileNotFoundError(
-            f"The supplied moalmanac-db path is missing: {indications_path}"
-        )
+    database_dir = require_database(args.database_dir)
 
     history = prepare_label_history(
         work_dir,
@@ -93,7 +89,7 @@ def main() -> int:
     if assessment_path.exists() and not args.overwrite:
         assessment = load_json_object(assessment_path, "Revision assessment")
     else:
-        existing = load_existing_indications(indications_path, status["document_id"])
+        existing = load_existing_indications(database_dir, status["document_id"])
         pair = load_section_pair_from_cache(
             history.cache_json,
             baseline_label_url=status["curated_label_url"],

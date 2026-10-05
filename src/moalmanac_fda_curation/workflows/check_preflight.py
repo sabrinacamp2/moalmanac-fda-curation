@@ -13,8 +13,12 @@ from ..core.check_curation_preflight import check_curation_preflight
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--application-number", required=True)
-    parser.add_argument("--documents-json", type=Path, required=True)
-    parser.add_argument("--urls-json", type=Path)
+    parser.add_argument(
+        "--database-dir",
+        type=Path,
+        required=True,
+        help="Root of the curator's local moalmanac-db checkout.",
+    )
     parser.add_argument("--output-json", type=Path)
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
@@ -22,15 +26,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    documents_path = args.documents_json.resolve()
-    urls_path = (
-        args.urls_json.resolve()
-        if args.urls_json is not None
-        else documents_path.parent / "urls.json"
-    )
-    result = check_curation_preflight(
-        args.application_number, documents_path, urls_path
-    )
+    result = check_curation_preflight(args.application_number, args.database_dir)
     if args.output_json is None:
         print(json.dumps(result, indent=2))
         return 0

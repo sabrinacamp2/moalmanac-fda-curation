@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ..core.extract_indication_descriptions import DEFAULT_MAX_TOKENS, DEFAULT_MODEL
 from ..core.build_section1_changelogs import output_stem
-from ..core.artifacts import load_document_artifact, resolve_document_application_number
+from ..core.artifacts import load_document_proposal, resolve_document_application_number
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,7 +52,7 @@ def main() -> int:
     args = parse_args()
     work_dir = args.work_dir.resolve()
     document = work_dir / "intermediate" / "document.proposal.json"
-    document_payload = load_document_artifact(document)
+    document_proposal = load_document_proposal(document)
     indication_fields = one_file(
         work_dir / "intermediate",
         "*-claude_chunked_indication_fields.json",
@@ -72,8 +72,8 @@ def main() -> int:
         else "selected-approval-evidence.json"
     )
     changelog_stem = output_stem(
-        document_payload["drug_name_brand"],
-        resolve_document_application_number(document_payload),
+        document_proposal["document"]["drug_name_brand"],
+        resolve_document_application_number(document_proposal),
     )
     changelog_markdown = (
         intermediate

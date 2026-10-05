@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 from typing import Any, Callable, Literal
 
 from pydantic import BaseModel
@@ -24,21 +23,6 @@ class IndicationMapping(BaseModel):
 
 class IndicationMappingResponse(BaseModel):
     mappings: list[IndicationMapping]
-
-
-def load_existing_indications(
-    path: Path | str, document_id: str
-) -> list[dict[str, Any]]:
-    """Load indications linked to one document."""
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(payload, list) or not all(
-        isinstance(item, dict) for item in payload
-    ):
-        raise ValueError(f"{path} must contain a JSON list of indication objects")
-    indications = [item for item in payload if item.get("document_id") == document_id]
-    if not indications:
-        raise ValueError(f"No indications found for {document_id} in {path}")
-    return indications
 
 
 def indexed_latest_indications(

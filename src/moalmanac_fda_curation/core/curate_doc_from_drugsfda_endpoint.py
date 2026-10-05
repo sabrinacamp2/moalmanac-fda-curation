@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Create a MOAlmanac FDA document entry from the openFDA drug/drugsfda endpoint.
+"""Create a MOAlmanac FDA document proposal from the openFDA drug/drugsfda endpoint.
+
+The proposal holds one `documents.json` record and the `urls.json` records it cites.
 
 Example:
     python curate_doc_from_drugsfda_endpoint.py --application-number NDA211651
@@ -20,6 +22,8 @@ from urllib.parse import urlparse
 warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL*")
 
 import requests
+
+from .moalmanac_records import FDA_AGENT_ID, fda_document_id, url_id
 
 
 def parse_args() -> argparse.Namespace:
@@ -207,8 +211,7 @@ def get_formatted_text_fields(
     label_url = label_fields["label_url"]
     company_period = "" if company.endswith((".", "!", "?")) else "."
 
-    brand_slug = re.sub(r"[^a-z0-9]+", "_", brand.lower()).strip("_")
-    document_id = f"doc:fda.{brand_slug}"
+    document_id = fda_document_id(brand)
     name = f"{brand} ({generic}) [package insert]. FDA."
     description = (
         f"{company}{company_period} {brand} ({generic}) [package insert]. "
@@ -223,38 +226,47 @@ def get_formatted_text_fields(
     }
 
 
-def build_document(
+def build_document_proposal(
     application_fields: dict[str, Any],
     label_fields: dict[str, Any],
     date_fields: dict[str, str],
     drug_fields: dict[str, str],
     text_fields: dict[str, str],
 ) -> dict[str, Any]:
-    """Assemble the final MOAlmanac documents.json entry."""
+    """Assemble one documents.json record and the urls.json records it cites."""
+    document_id = text_fields["document_id"]
+    label_url_id = url_id(document_id, "label")
+    overview_url_id = url_id(document_id, "overview")
     return {
-        "id": text_fields["document_id"],
-        "type": "Document",
-        "documentType": "Regulatory approval",
-        "name": text_fields["name"],
-        "title": None,
-        "aliases": [],
-        "description": text_fields["description"],
-        "urls": [label_fields["label_url"], application_fields["overview_url"]],
-        "doi": None,
-        "pmid": None,
-        "agent_id": "fda",
-        "company": drug_fields["company"],
-        "drug_name_brand": drug_fields["brand"],
-        "drug_name_generic": drug_fields["generic"],
-        "first_publication_date": date_fields["first_publication_date"],
-        "identification_number": application_fields["identification_number"],
-        "publication_date": date_fields["publication_date"],
-        "status": "Active",
+        "document": {
+            "id": document_id,
+            "type": "Document",
+            "documentType": "Regulatory approval",
+            "name": text_fields["name"],
+            "title": None,
+            "aliases": [],
+            "description": text_fields["description"],
+            "urls": [label_url_id, overview_url_id],
+            "doi": None,
+            "pmid": None,
+            "agent_id": FDA_AGENT_ID,
+            "company": drug_fields["company"],
+            "drug_name_brand": drug_fields["brand"],
+            "drug_name_generic": drug_fields["generic"],
+            "first_publication_date": date_fields["first_publication_date"],
+            "identification_number": application_fields["identification_number"],
+            "publication_date": date_fields["publication_date"],
+            "status": "Active",
+        },
+        "urls": [
+            {"id": label_url_id, "url": label_fields["label_url"]},
+            {"id": overview_url_id, "url": application_fields["overview_url"]},
+        ],
     }
 
 
 def curate_document(args: argparse.Namespace) -> dict[str, Any]:
-    """Run each curation step and return the final document entry."""
+    """Run each curation step and return the document proposal."""
     fda_record = fetch_fda_record(args.application_number)
 
     application_fields = get_application_identifiers(fda_record)
@@ -263,7 +275,7 @@ def curate_document(args: argparse.Namespace) -> dict[str, Any]:
     drug_fields = get_drug_and_company_fields(fda_record, args.company)
     text_fields = get_formatted_text_fields(drug_fields, label_fields, date_fields)
 
-    return build_document(
+    return build_document_proposal(
         application_fields=application_fields,
         label_fields=label_fields,
         date_fields=date_fields,
@@ -273,10 +285,10 @@ def curate_document(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
-    """Create and print or write one FDA document entry."""
+    """Create and print or write one FDA document proposal."""
     args = parse_args()
-    document = curate_document(args)
-    text = json.dumps(document, indent=2) + "\n"
+    proposal = curate_document(args)
+    text = json.dumps(proposal, indent=2) + "\n"
 
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

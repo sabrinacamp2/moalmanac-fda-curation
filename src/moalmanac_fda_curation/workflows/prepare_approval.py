@@ -21,9 +21,9 @@ from ..core.match_indication_approval_dates_from_changelog import (
     selected_indication_indexes,
 )
 from ..core.artifacts import (
-    document_label_url,
-    load_document_artifact,
+    load_document_proposal,
     load_json_object,
+    proposal_label_url,
     resolve_document_application_number,
     write_json_atomic,
 )
@@ -69,10 +69,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     work_dir = args.work_dir.resolve()
-    document = load_document_artifact(args.document_json.resolve())
+    proposal = load_document_proposal(args.document_json.resolve())
+    document = proposal["document"]
     indications = load_chunked_indication_fields(args.indication_fields_json.resolve())
     brand = document["drug_name_brand"]
-    application = resolve_document_application_number(document)
+    application = resolve_document_application_number(proposal)
     stem = output_stem(brand, application)
     changelog_dir = work_dir / "intermediate" / "section1-changelogs"
     changelog_json = changelog_dir / f"{stem}-section1-changelog.json"
@@ -84,7 +85,7 @@ def main() -> int:
         changelog_markdown, changelog_json = build_changelog(
             brand_name=brand,
             application_number=application,
-            current_label_url=document_label_url(document),
+            current_label_url=proposal_label_url(proposal),
             output_dir=changelog_dir,
             cache_dir=work_dir / "intermediate" / "section1-cache",
             historical_labels_dir=work_dir / "historical-labels",

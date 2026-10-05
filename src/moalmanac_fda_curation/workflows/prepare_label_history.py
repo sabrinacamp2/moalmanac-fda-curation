@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import NamedTuple
 
 from ..core.artifacts import (
-    document_label_url,
-    load_document_artifact,
+    load_document_proposal,
+    proposal_label_url,
     resolve_document_application_number,
     same_url_path,
 )
@@ -39,9 +39,9 @@ def prepare_label_history(
 ) -> LabelHistoryPaths:
     work_dir = work_dir.resolve()
     document_path = work_dir / "intermediate" / "document.proposal.json"
-    document = load_document_artifact(document_path)
-    application = resolve_document_application_number(document)
-    brand = document["drug_name_brand"]
+    proposal = load_document_proposal(document_path)
+    application = resolve_document_application_number(proposal)
+    brand = proposal["document"]["drug_name_brand"]
     stem = output_stem(brand, application)
     changelog_dir = work_dir / "intermediate" / "section1-changelogs"
     cache_dir = work_dir / "intermediate" / "section1-cache"
@@ -74,7 +74,7 @@ def prepare_label_history(
     build_changelog(
         brand_name=brand,
         application_number=application,
-        current_label_url=document_label_url(document),
+        current_label_url=proposal_label_url(proposal),
         output_dir=changelog_dir,
         cache_dir=cache_dir,
         historical_labels_dir=work_dir / "historical-labels",

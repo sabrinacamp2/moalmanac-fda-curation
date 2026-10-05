@@ -202,7 +202,7 @@ def target_fields_block(indication: dict[str, Any]) -> str:
     """Render structured target fields for the LLM prompt."""
     fields = [
         ("Therapeutic(s)", indication.get("raw_therapeutics")),
-        ("Cancer type", indication.get("raw_cancer_type")),
+        ("Cancer type", indication.get("raw_cancer_types")),
         ("Patient population", indication.get("raw_patient_population")),
         ("Biomarker(s)", indication.get("raw_biomarkers")),
     ]
