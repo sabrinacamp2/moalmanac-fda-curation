@@ -24,9 +24,18 @@ class CheckCurationPreflightTest(unittest.TestCase):
                 "urls": ["url:fda:opdivo:label", "url:fda:opdivo:overview"],
             }
         )
+        dated_document = copy.deepcopy(document)
+        dated_document.update(
+            {
+                "id": "doc:fda:opdivo:2014-12-22",
+                "urls": ["url:fda:opdivo:label:2014-12-22", "url:fda:opdivo:overview"],
+                "publication_date": "2014-12-22",
+                "status": "Deprecated",
+            }
+        )
         self.database_dir = db_fixture.write_database(
             Path(self.temporary_directory.name),
-            documents=[document],
+            documents=[document, dated_document],
             urls=[
                 {
                     "id": "url:fda:opdivo:label",

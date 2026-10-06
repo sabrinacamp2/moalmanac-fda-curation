@@ -17,6 +17,7 @@ from ..core.artifacts import (
 )
 from ..core.moalmanac_records import (
     ContributionLedger,
+    DatedDocuments,
     indication_id,
     indication_record,
     initial_curation_description,
@@ -32,6 +33,7 @@ from .assembly import (
     add_contribution_arguments,
     fda_approval_contribution,
     indexed,
+    label_urls_by_date,
     load_json_list,
     reviewed_approval,
     reviewed_values,
@@ -109,6 +111,7 @@ def assemble_new_indications(
     document_id: str,
     numbers: Iterator[int],
     ledger: ContributionLedger,
+    dated_documents: DatedDocuments,
     curator_contribution: Callable[[], str],
 ) -> list[dict[str, Any]]:
     """Build finished records for indications newly discovered this session.
@@ -144,7 +147,10 @@ def assemble_new_indications(
         outputs.append(
             indication_record(
                 record_id=indication_id(document_id, next(numbers)),
-                document_id=document_id,
+                reported_in=[
+                    document_id,
+                    dated_documents.reference(approval["initial_approval_date"]),
+                ],
                 values=values,
                 status=approval["status"],
                 contributions=ledger.ordered(
@@ -165,6 +171,7 @@ def assemble_replacement_indications(
     document_id: str,
     numbers: Iterator[int],
     ledger: ContributionLedger,
+    dated_documents: DatedDocuments,
     curator_contribution: Callable[[], str],
 ) -> list[tuple[str, dict[str, Any]]]:
     """Suggest a new record for each changed indication the curator chose to replace.
@@ -199,7 +206,10 @@ def assemble_replacement_indications(
         approval = reviewed_approval(dates[index], values["indication"], approval_decision, name)
         replacement = indication_record(
             record_id=indication_id(document_id, next(numbers)),
-            document_id=document_id,
+            reported_in=[
+                document_id,
+                dated_documents.reference(approval["initial_approval_date"]),
+            ],
             values=values,
             status=approval["status"],
             contributions=ledger.ordered(
@@ -235,6 +245,8 @@ def main() -> int:
     outputs = {
         "new_indications": reviewed_dir / "new-indications.json",
         "replacements": reviewed_dir / "replacements.json",
+        "dated_documents": reviewed_dir / "dated-documents.json",
+        "urls": reviewed_dir / "urls.json",
         "contributions": reviewed_dir / "contributions.json",
         "document_patch": reviewed_dir / "document-update.json",
         "document": reviewed_dir / "revised-document.json",
@@ -259,6 +271,12 @@ def main() -> int:
     document_id = targets["document_id"]
     existing_document = one_by_id(database["documents"], document_id, "document")
     ledger = ContributionLedger(database["contributions"])
+    dated_documents = DatedDocuments(
+        existing_document,
+        database["documents"],
+        label_urls_by_date(intermediate),
+        args.contribution_date,
+    )
     numbers = itertools.count(next_indication_number(database["indications"], document_id))
 
     def curator_contribution(default_description: str) -> Callable[[], str]:
@@ -289,6 +307,7 @@ def main() -> int:
         document_id=document_id,
         numbers=numbers,
         ledger=ledger,
+        dated_documents=dated_documents,
         curator_contribution=curator_contribution(
             revised_curation_description(
                 existing_document, latest_proposal["document"]["publication_date"]
@@ -324,6 +343,7 @@ def main() -> int:
         document_id=document_id,
         numbers=numbers,
         ledger=ledger,
+        dated_documents=dated_documents,
         curator_contribution=curator_contribution(
             initial_curation_description(existing_document)
         ),
@@ -340,6 +360,7 @@ def main() -> int:
         one_by_id(database["urls"], label_url_id, "URL"),
     )
     require_unused_ids(new_indications, database["indications"], "indications")
+    require_unused_ids(dated_documents.new_urls, database["urls"], "urls")
     if ledger.new_records:
         require_known_agents(
             [record["agent_id"] for record in ledger.new_records], database["agents"]
@@ -347,8 +368,8 @@ def main() -> int:
     validate_records(
         database_dir,
         {
-            "documents": [revised_document],
-            "urls": [revised_url],
+            "documents": [revised_document, *dated_documents.new_documents],
+            "urls": [revised_url, *dated_documents.new_urls],
             "indications": new_indications,
             "contributions": ledger.new_records,
         },
@@ -356,6 +377,8 @@ def main() -> int:
     for key, payload in (
         ("new_indications", new_indications),
         ("replacements", replacement_links),
+        ("dated_documents", dated_documents.new_documents),
+        ("urls", dated_documents.new_urls),
         ("contributions", ledger.new_records),
         ("document_patch", document_patch),
         ("document", revised_document),
@@ -370,6 +393,7 @@ def main() -> int:
     )
     for link in replacement_links:
         print(f"{link['indication_id']} replaces {link['replaces']}")
+    print(f"Assembled {len(dated_documents.new_documents)} new dated documents")
     print(f"Assembled {len(ledger.new_records)} new contributions")
     return 0
 

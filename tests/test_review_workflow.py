@@ -90,6 +90,10 @@ class ReviewWorkflowTest(unittest.TestCase):
         }
         # The fixture database has not curated this application yet.
         self.database = db_fixture.tables(documents=[], indications=[], urls=[])
+        self.label_urls = {
+            "2020-01-01": "https://example.test/2020.pdf",
+            "2026-01-02": "https://example.test/initial.pdf",
+        }
         self.indications = {
             "source_chunks": [
                 {
@@ -658,6 +662,7 @@ class ReviewWorkflowTest(unittest.TestCase):
                 self.dates,
                 decisions,
                 self.database,
+                label_urls=self.label_urls,
                 contribution_date="2026-10-02",
             )
             self.assertEqual(assembled["document"]["id"], "doc:fda:example")
@@ -685,9 +690,24 @@ class ReviewWorkflowTest(unittest.TestCase):
             self.dates,
             self.accepted_decisions(0),
             self.database,
+            label_urls=self.label_urls,
             contribution_date="2026-10-02",
         )
-        self.assertEqual(assembled["urls"], self.proposal["urls"])
+        self.assertEqual(
+            assembled["urls"],
+            [
+                *self.proposal["urls"],
+                {"id": "url:fda:example:label:2026-01-02", "url": "https://example.test/initial.pdf"},
+            ],
+        )
+        dated = assembled["dated_documents"]
+        self.assertEqual([record["id"] for record in dated], ["doc:fda:example:2026-01-02"])
+        self.assertEqual(dated[0]["status"], "Deprecated")
+        self.assertEqual(dated[0]["publication_date"], "2026-01-02")
+        self.assertEqual(
+            dated[0]["urls"], ["url:fda:example:label:2026-01-02", "url:fda:example:overview"]
+        )
+        self.assertIn("https://example.test/initial.pdf. Revised January 2026.", dated[0]["description"])
         self.assertEqual(
             assembled["indications"],
             [{
@@ -698,7 +718,7 @@ class ReviewWorkflowTest(unittest.TestCase):
                     "ctrb:vanallenlab:2026-10-02:0",
                     "ctrb:fda:2026-01-02:0",
                 ],
-                "reportedIn": ["doc:fda:example"],
+                "reportedIn": ["doc:fda:example", "doc:fda:example:2026-01-02"],
                 "status": "Approved",
                 "statement_description": self.descriptions["indications"][0][
                     "statement_description"
@@ -738,6 +758,7 @@ class ReviewWorkflowTest(unittest.TestCase):
             self.dates,
             self.accepted_decisions(0),
             self.database,
+            label_urls=self.label_urls,
             contribution_date="2026-10-02",
         )
         self.assertIn("ctrb:fda:2020-01-01:0", assembled["indications"][0]["contributions"])
@@ -765,6 +786,7 @@ class ReviewWorkflowTest(unittest.TestCase):
             self.dates,
             decisions,
             self.database,
+            label_urls=self.label_urls,
             contribution_date="2026-10-02",
         )
         self.assertEqual(
@@ -785,6 +807,7 @@ class ReviewWorkflowTest(unittest.TestCase):
             self.dates,
             decisions,
             self.database,
+            label_urls=self.label_urls,
             contribution_date="2026-10-02",
         )
         self.assertEqual(assembled["indications"][0]["status"], "Accelerated")
@@ -805,6 +828,7 @@ class ReviewWorkflowTest(unittest.TestCase):
                 self.dates,
                 self.accepted_decisions(0),
                 database,
+                label_urls=self.label_urls,
                 contribution_date="2026-10-02",
             )
 
@@ -826,6 +850,7 @@ class ReviewWorkflowTest(unittest.TestCase):
                 ("selected-approval-evidence.json", self.dates),
             ):
                 (intermediate / name).write_text(json.dumps(payload), encoding="utf-8")
+            db_fixture.write_changelog(intermediate, self.label_urls)
             (review / "decisions.json").write_text(
                 json.dumps(self.accepted_decisions(0)), encoding="utf-8"
             )
@@ -842,10 +867,36 @@ class ReviewWorkflowTest(unittest.TestCase):
                 json.loads((reviewed / "document.json").read_text())["id"],
                 "doc:fda:example",
             )
-            self.assertEqual(len(json.loads((reviewed / "urls.json").read_text())), 2)
+            self.assertEqual(
+                [
+                    record["id"]
+                    for record in json.loads((reviewed / "dated-documents.json").read_text())
+                ],
+                ["doc:fda:example:2026-01-02"],
+            )
+            self.assertEqual(len(json.loads((reviewed / "urls.json").read_text())), 3)
             self.assertEqual(len(json.loads((reviewed / "indication.json").read_text())), 1)
             self.assertEqual(
                 len(json.loads((reviewed / "contributions.json").read_text())), 2
+            )
+
+    def test_approval_date_needs_a_known_label(self) -> None:
+        decisions = self.accepted_decisions(0)
+        decisions["indications"]["0"]["approval"] = {
+            "decision": "edited",
+            "overrides": {"initial_approval_date": "2019-05-05"},
+            "source_sha256": {},
+        }
+        with self.assertRaisesRegex(ValueError, "No FDA label from 2019-05-05"):
+            assemble_reviewed(
+                self.proposal,
+                self.indications,
+                self.descriptions,
+                self.dates,
+                decisions,
+                self.database,
+                label_urls=self.label_urls,
+                contribution_date="2026-10-02",
             )
 
     def test_assemble_reviewed_cli_rejects_schema_violations(self) -> None:
@@ -866,6 +917,7 @@ class ReviewWorkflowTest(unittest.TestCase):
                 ("selected-approval-evidence.json", self.dates),
             ):
                 (intermediate / name).write_text(json.dumps(payload), encoding="utf-8")
+            db_fixture.write_changelog(intermediate, self.label_urls)
             (work_dir / "review" / "decisions.json").write_text(
                 json.dumps(self.accepted_decisions(0)), encoding="utf-8"
             )
@@ -910,6 +962,7 @@ class ReviewWorkflowTest(unittest.TestCase):
                 self.dates,
                 decisions,
                 self.database,
+                label_urls=self.label_urls,
                 contribution_date="2026-10-02",
             )
 

@@ -54,6 +54,38 @@ The document cites its URLs by ID. The URLs themselves live in `referenced/urls.
 Company naming and punctuation are editorial fields, while application, label date, and
 URL require source provenance.
 
+## Dated document example
+
+This evergreen document always cites the newest curated label. Each label version in
+which an indication was first approved also has a dated copy that cites that version, has
+its own label URL record, and is `Deprecated` by design:
+
+```json
+{
+  "id": "doc:fda:libtayo:2021-02-22",
+  "type": "Document",
+  "documentType": "Regulatory approval",
+  "name": "Libtayo (cemiplimab) [package insert]. FDA.",
+  "title": null,
+  "aliases": [],
+  "description": "Regeneron Pharmaceuticals, Inc. Libtayo (cemiplimab) [package insert]. U.S. Food and Drug Administration website. https://www.accessdata.fda.gov/drugsatfda_docs/label/2021/761097s007lbl.pdf. Revised February 2021. Accessed October 6, 2026.",
+  "urls": [
+    "url:fda:libtayo:label:2021-02-22",
+    "url:fda:libtayo:overview"
+  ],
+  "doi": null,
+  "pmid": null,
+  "agent_id": "agent:org:fda",
+  "company": "Regeneron Pharmaceuticals, Inc.",
+  "drug_name_brand": "Libtayo",
+  "drug_name_generic": "cemiplimab",
+  "first_publication_date": null,
+  "identification_number": 761097,
+  "publication_date": "2021-02-22",
+  "status": "Deprecated"
+}
+```
+
 ## Indication example: indication-only statement description
 
 From `referenced/indications.json`:
@@ -68,7 +100,8 @@ From `referenced/indications.json`:
     "ctrb:fda:2021-02-22:0"
   ],
   "reportedIn": [
-    "doc:fda:libtayo"
+    "doc:fda:libtayo",
+    "doc:fda:libtayo:2021-02-22"
   ],
   "status": "Approved",
   "statement_description": "The U.S. Food and Drug Administration granted approval to cemiplimab for the first-line treatment of adult patients with NSCLC whose tumors have high PD-L1 expression [Tumor Proportion Score (TPS) >= 50%] as determined by an FDA-approved test, with no EGFR, ALK or ROS1 aberrations, and is: (i) locally advanced where patients are not candidates for surgical resection or definitive chemoradiation or (ii) metastatic.",
@@ -116,7 +149,8 @@ from `referenced/contributions.json`:
     "ctrb:fda:2018-12-21:0"
   ],
   "reportedIn": [
-    "doc:fda:sprycel"
+    "doc:fda:sprycel",
+    "doc:fda:sprycel:2018-12-21"
   ],
   "status": "Approved",
   "statement_description": "The U.S. Food and Drug Administration granted approval to dasatinib in combination with chemotherapy for the treatment of pediatric patients 1 year of age and older with newly diagnosed Philadelphia chromosome-positive acute lymphoblastic leukemia (Ph+ ALL). This indication is based on CA180372 (NCT01460160), a multicenter, multiple-cohort study of pediatric patients with newly diagnosed B-cell precursor Ph+ ALL, where the backbone chemotherapy regimen was AIEOP-BFM ALL 2000 multi-agent chemotherapy protocol.",
@@ -140,7 +174,8 @@ approval."
 
 ## Output checks
 
-- Keep `reportedIn` aligned with the document's `id`.
+- List the evergreen document first in `reportedIn`, then the dated document for the
+  label in which the indication was first approved.
 - Order an indication's `contributions` by date, newest first.
 - Use ISO `YYYY-MM-DD` dates.
 - Preserve the approval as written in `description`, including material qualifiers.

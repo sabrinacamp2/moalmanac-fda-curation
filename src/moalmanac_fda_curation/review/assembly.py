@@ -16,6 +16,7 @@ from ..core.moalmanac_records import (
     FDA_AGENT_ID,
     FDA_APPROVAL_CONTRIBUTIONS,
     ContributionLedger,
+    DatedDocuments,
     approval_status,
     indication_id,
     indication_record,
@@ -45,6 +46,17 @@ def indexed(items: list[dict[str, Any]], name: str) -> dict[int, dict[str, Any]]
             raise ValueError(f"Duplicate {name} indication_index: {index}")
         result[index] = item
     return result
+
+
+def label_urls_by_date(intermediate: Path) -> dict[str, str]:
+    """Map each label date in the run's Indications and Usage changelog to its label URL."""
+    paths = sorted((intermediate / "section1-changelogs").glob("*-section1-changelog.json"))
+    if len(paths) > 1:
+        raise FileNotFoundError(f"Expected at most one label changelog; found {len(paths)}")
+    if not paths:
+        return {}
+    events = load_json_object(paths[0], "Indications and Usage changelog").get("events") or []
+    return {event["date"]: event["label_url"] for event in events}
 
 
 def accepted_entry(entry: dict[str, Any] | None, name: str) -> dict[str, Any]:
@@ -117,11 +129,16 @@ def assemble_reviewed(
     decisions: dict[str, Any],
     database: dict[str, list[dict[str, Any]]],
     *,
+    label_urls: dict[str, str],
     curator_agent_id: str = DEFAULT_CURATOR_AGENT_ID,
     contribution_date: str,
     contribution_description: str | None = None,
 ) -> dict[str, Any]:
-    """Apply explicit decisions and build the records a new FDA curation adds."""
+    """Apply explicit decisions and build the records a new FDA curation adds.
+
+    `label_urls` maps label dates from the run's label history to their URLs, so
+    each indication can report a dated document for its initial approval label.
+    """
     verify_decision_sources(decisions)
     document = copy.deepcopy(proposal["document"])
     document.update(accepted_entry(decisions.get("document"), "document").get("overrides") or {})
@@ -164,10 +181,16 @@ def assemble_reviewed(
         contribution_date,
         contribution_description or initial_curation_description(document),
     )
+    dated_documents = DatedDocuments(
+        document, database["documents"], label_urls, contribution_date
+    )
     records = [
         indication_record(
             record_id=indication_id(document["id"], number),
-            document_id=document["id"],
+            reported_in=[
+                document["id"],
+                dated_documents.reference(approval["initial_approval_date"]),
+            ],
             values=values,
             status=approval["status"],
             contributions=ledger.ordered(
@@ -176,8 +199,10 @@ def assemble_reviewed(
         )
         for number, (values, approval) in enumerate(reviewed)
     ]
-    urls = copy.deepcopy(proposal["urls"])
-    require_unused_ids([document], database["documents"], "documents")
+    urls = copy.deepcopy(proposal["urls"]) + dated_documents.new_urls
+    require_unused_ids(
+        [document, *dated_documents.new_documents], database["documents"], "documents"
+    )
     require_unused_ids(urls, database["urls"], "urls")
     require_unused_ids(records, database["indications"], "indications")
     require_known_agents(
@@ -185,6 +210,7 @@ def assemble_reviewed(
     )
     return {
         "document": document,
+        "dated_documents": dated_documents.new_documents,
         "urls": urls,
         "indications": records,
         "contributions": ledger.new_records,
@@ -239,6 +265,7 @@ def main() -> int:
     output_dir = work_dir / "reviewed"
     outputs = {
         "document": output_dir / "document.json",
+        "dated_documents": output_dir / "dated-documents.json",
         "urls": output_dir / "urls.json",
         "indications": output_dir / "indication.json",
         "contributions": output_dir / "contributions.json",
@@ -267,6 +294,7 @@ def main() -> int:
         ),
         decisions=load_decisions(work_dir / "review" / "decisions.json"),
         database=load_database(database_dir),
+        label_urls=label_urls_by_date(intermediate),
         curator_agent_id=args.curator_agent_id,
         contribution_date=args.contribution_date,
         contribution_description=args.contribution_description,
@@ -274,7 +302,7 @@ def main() -> int:
     validate_records(
         database_dir,
         {
-            "documents": [assembled["document"]],
+            "documents": [assembled["document"], *assembled["dated_documents"]],
             "urls": assembled["urls"],
             "indications": assembled["indications"],
             "contributions": assembled["contributions"],

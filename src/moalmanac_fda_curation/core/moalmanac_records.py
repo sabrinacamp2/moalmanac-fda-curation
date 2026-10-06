@@ -4,14 +4,17 @@ The curation pipeline describes an indication with working fields: `indication`
 (the verbatim label text), `statement_description`, `raw_biomarkers`,
 `raw_cancer_types`, `raw_therapeutics`, an `initial_approval_date`, and an
 approval `status`. moalmanac-db stores the verbatim text as the indication's
-`description` and the approval date as a dated contribution from the FDA agent.
+`description`, the approval date as a dated contribution from the FDA agent, and
+the approval label as a dated, Deprecated copy of the drug's evergreen document.
 This module is the only place that translates between the two shapes.
 """
 
 from __future__ import annotations
 
+import copy
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +28,7 @@ FDA_APPROVAL_CONTRIBUTIONS = {
 DATABASE_TABLES = ("agents", "contributions", "documents", "indications", "urls")
 ACCELERATED_APPROVAL = re.compile(r"\baccelerated\s+approval\b", re.IGNORECASE)
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+DATED_FDA_DOCUMENT = re.compile(r"^doc:fda:[^:]+:\d{4}-\d{2}-\d{2}$")
 
 
 def database_table_path(database_dir: Path, table: str) -> Path:
@@ -79,6 +83,31 @@ def url_id(document_id: str, kind: str) -> str:
     return f"url:{document_id.removeprefix('doc:')}:{kind}"
 
 
+def is_dated_document(document_id: str) -> bool:
+    """Report whether an ID names a dated FDA label version, e.g. `doc:fda:x:2023-06-14`."""
+    return bool(DATED_FDA_DOCUMENT.match(document_id))
+
+
+def fda_label_citation(
+    *,
+    company: str,
+    brand: str,
+    generic: str,
+    label_url: str,
+    label_date: str,
+    accessed_date: str,
+) -> str:
+    """Return the MOAlmanac citation for one version of an FDA package insert."""
+    company_period = "" if company.endswith((".", "!", "?")) else "."
+    revised = datetime.strptime(label_date, "%Y-%m-%d")
+    accessed = datetime.strptime(accessed_date, "%Y-%m-%d")
+    return (
+        f"{company}{company_period} {brand} ({generic}) [package insert]. "
+        f"U.S. Food and Drug Administration website. {label_url}. "
+        f"Revised {revised:%B %Y}. Accessed {accessed:%B} {accessed.day}, {accessed:%Y}."
+    )
+
+
 def indication_id(document_id: str, number: int) -> str:
     return f"ind:{document_id.removeprefix('doc:')}:{number}"
 
@@ -128,7 +157,9 @@ def validate_approval(approval: dict[str, Any], name: str) -> None:
 
 
 def existing_indication_view(
-    record: dict[str, Any], contributions_by_id: dict[str, dict[str, Any]]
+    record: dict[str, Any],
+    contributions_by_id: dict[str, dict[str, Any]],
+    label_urls_by_document: dict[str, str],
 ) -> dict[str, Any]:
     """Express one database indication in the pipeline's working fields."""
     missing = [cid for cid in record["contributions"] if cid not in contributions_by_id]
@@ -137,6 +168,9 @@ def existing_indication_view(
     contributions = [contributions_by_id[cid] for cid in record["contributions"]]
     fda_dates = sorted(
         item["date"] for item in contributions if item["agent_id"] == FDA_AGENT_ID
+    )
+    approval_document = next(
+        (item for item in record.get("reportedIn") or [] if is_dated_document(item)), None
     )
     return {
         "id": record["id"],
@@ -147,13 +181,31 @@ def existing_indication_view(
         "raw_therapeutics": record["raw_therapeutics"],
         "status": record["status"],
         "initial_approval_date": fda_dates[0] if fda_dates else None,
+        "initial_approval_document": approval_document,
+        "initial_approval_label_url": label_urls_by_document.get(approval_document),
         "contributions": contributions,
+    }
+
+
+def label_urls_by_document(
+    documents: list[dict[str, Any]], urls: list[dict[str, Any]]
+) -> dict[str, str]:
+    """Map each document ID to the URL of the label it cites."""
+    url_by_id = {item["id"]: item["url"] for item in urls}
+    return {
+        document["id"]: url_by_id[label_id]
+        for document in documents
+        for label_id in document.get("urls") or []
+        if ":label" in label_id and label_id in url_by_id
     }
 
 
 def load_existing_indications(database_dir: Path, document_id: str) -> list[dict[str, Any]]:
     """Load the current (Approved or Accelerated) indications reported in a document."""
     contributions = {item["id"]: item for item in load_table(database_dir, "contributions")}
+    label_urls = label_urls_by_document(
+        load_table(database_dir, "documents"), load_table(database_dir, "urls")
+    )
     records = [
         record
         for record in load_table(database_dir, "indications")
@@ -162,13 +214,15 @@ def load_existing_indications(database_dir: Path, document_id: str) -> list[dict
     ]
     if not records:
         raise ValueError(f"No Approved or Accelerated indications report {document_id}")
-    return [existing_indication_view(record, contributions) for record in records]
+    return [
+        existing_indication_view(record, contributions, label_urls) for record in records
+    ]
 
 
 def indication_record(
     *,
     record_id: str,
-    document_id: str,
+    reported_in: list[str],
     values: dict[str, Any],
     status: str,
     contributions: list[str],
@@ -179,7 +233,7 @@ def indication_record(
         "type": "Indication",
         "description": values["indication"],
         "contributions": contributions,
-        "reportedIn": [document_id],
+        "reportedIn": reported_in,
         "status": status,
         "statement_description": values["statement_description"],
         "raw_biomarkers": values.get("raw_biomarkers"),
@@ -237,6 +291,67 @@ class ContributionLedger:
         if unknown:
             raise ValueError(f"Unknown contribution IDs: {unknown}")
         return sorted(unique, key=lambda cid: self._dates[cid], reverse=True)
+
+
+class DatedDocuments:
+    """Reuse dated FDA label documents in moalmanac-db and create the ones it lacks.
+
+    A dated document copies the drug's evergreen document for one label version: it
+    cites that label, links its own label URL record and the shared overview URL, and
+    is Deprecated by design. Each FDA indication reports the dated document for the
+    label in which it was initially approved.
+    """
+
+    def __init__(
+        self,
+        evergreen: dict[str, Any],
+        existing_documents: list[dict[str, Any]],
+        label_urls_by_date: dict[str, str],
+        accessed_date: str,
+    ) -> None:
+        self._evergreen = evergreen
+        self._existing = {item["id"] for item in existing_documents}
+        self._label_urls_by_date = label_urls_by_date
+        self._accessed_date = accessed_date
+        self.new_documents: list[dict[str, Any]] = []
+        self.new_urls: list[dict[str, Any]] = []
+
+    def reference(self, label_date: str) -> str:
+        document_id = f"{self._evergreen['id']}:{label_date}"
+        if document_id in self._existing:
+            return document_id
+        label_url = self._label_urls_by_date.get(label_date)
+        if label_url is None:
+            raise ValueError(
+                f"No FDA label from {label_date} is in this run's label history, and "
+                f"moalmanac-db has no {document_id}; choose an approval date from the "
+                "label changelog"
+            )
+        label_url_id = f"{url_id(self._evergreen['id'], 'label')}:{label_date}"
+        document = copy.deepcopy(self._evergreen)
+        document.update(
+            {
+                "id": document_id,
+                "description": fda_label_citation(
+                    company=self._evergreen["company"],
+                    brand=self._evergreen["drug_name_brand"],
+                    generic=self._evergreen["drug_name_generic"],
+                    label_url=label_url,
+                    label_date=label_date,
+                    accessed_date=self._accessed_date,
+                ),
+                "urls": [
+                    label_url_id,
+                    *(item for item in self._evergreen["urls"] if not item.endswith(":label")),
+                ],
+                "publication_date": label_date,
+                "status": "Deprecated",
+            }
+        )
+        self._existing.add(document_id)
+        self.new_documents.append(document)
+        self.new_urls.append({"id": label_url_id, "url": label_url})
+        return document_id
 
 
 def require_unused_ids(

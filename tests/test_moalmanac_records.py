@@ -8,12 +8,16 @@ from pathlib import Path
 import db_fixture
 from moalmanac_fda_curation.core.moalmanac_records import (
     ContributionLedger,
+    DatedDocuments,
     approval_status,
     existing_indication_view,
     fda_document_id,
+    fda_label_citation,
     indication_id,
     indication_number,
     initial_curation_description,
+    is_dated_document,
+    label_urls_by_document,
     load_existing_indications,
     next_indication_number,
     require_database,
@@ -44,6 +48,84 @@ class RecordIdentifierTest(unittest.TestCase):
         self.assertEqual(next_indication_number(indications, "doc:fda:example"), 4)
         self.assertEqual(next_indication_number([], "doc:fda:example"), 0)
 
+    def test_dated_documents_are_recognized_by_their_id(self) -> None:
+        self.assertTrue(is_dated_document("doc:fda:example:2020-01-01"))
+        self.assertFalse(is_dated_document("doc:fda:example"))
+        self.assertFalse(is_dated_document("doc:ema:example:2020-01-01"))
+
+
+class CitationTest(unittest.TestCase):
+    def test_citation_names_the_label_version_and_access_date(self) -> None:
+        citation = fda_label_citation(
+            company="Example Co",
+            brand="Example",
+            generic="examplemab",
+            label_url="https://example.test/2020.pdf",
+            label_date="2020-01-01",
+            accessed_date="2026-10-06",
+        )
+        self.assertEqual(
+            citation,
+            "Example Co. Example (examplemab) [package insert]. U.S. Food and Drug "
+            "Administration website. https://example.test/2020.pdf. Revised January 2020. "
+            "Accessed October 6, 2026.",
+        )
+        self.assertTrue(
+            fda_label_citation(
+                company="Example Co.",
+                brand="Example",
+                generic="examplemab",
+                label_url="https://example.test/2020.pdf",
+                label_date="2020-01-01",
+                accessed_date="2026-10-06",
+            ).startswith("Example Co. Example")
+        )
+
+
+class DatedDocumentsTest(unittest.TestCase):
+    def dated_documents(self, label_urls: dict[str, str]) -> DatedDocuments:
+        return DatedDocuments(
+            db_fixture.DOCUMENT,
+            [db_fixture.DOCUMENT, db_fixture.DATED_DOCUMENT],
+            label_urls,
+            "2026-10-06",
+        )
+
+    def test_reuses_a_dated_document_already_in_the_database(self) -> None:
+        documents = self.dated_documents({})
+        self.assertEqual(documents.reference("2020-01-01"), "doc:fda:example:2020-01-01")
+        self.assertEqual(documents.new_documents, [])
+        self.assertEqual(documents.new_urls, [])
+
+    def test_creates_a_deprecated_copy_of_the_evergreen_document(self) -> None:
+        documents = self.dated_documents({"2026-01-02": "https://example.test/2026.pdf"})
+        self.assertEqual(documents.reference("2026-01-02"), "doc:fda:example:2026-01-02")
+        self.assertEqual(documents.reference("2026-01-02"), "doc:fda:example:2026-01-02")
+        expected = copy.deepcopy(db_fixture.DOCUMENT)
+        expected.update(
+            {
+                "id": "doc:fda:example:2026-01-02",
+                "description": (
+                    "Example Co. Example (examplemab) [package insert]. U.S. Food and Drug "
+                    "Administration website. https://example.test/2026.pdf. Revised January "
+                    "2026. Accessed October 6, 2026."
+                ),
+                "urls": ["url:fda:example:label:2026-01-02", "url:fda:example:overview"],
+                "publication_date": "2026-01-02",
+                "status": "Deprecated",
+            }
+        )
+        self.assertEqual(documents.new_documents, [expected])
+        self.assertEqual(list(documents.new_documents[0]), list(db_fixture.DOCUMENT))
+        self.assertEqual(
+            documents.new_urls,
+            [{"id": "url:fda:example:label:2026-01-02", "url": "https://example.test/2026.pdf"}],
+        )
+
+    def test_requires_a_label_for_a_new_approval_date(self) -> None:
+        with self.assertRaisesRegex(ValueError, "No FDA label from 2019-05-05"):
+            self.dated_documents({}).reference("2019-05-05")
+
 
 class CurationDescriptionTest(unittest.TestCase):
     def test_descriptions_name_the_workflow(self) -> None:
@@ -71,15 +153,20 @@ class ApprovalStatusTest(unittest.TestCase):
 
 
 class ExistingIndicationTest(unittest.TestCase):
-    def test_view_maps_database_fields_and_approval_contribution(self) -> None:
+    def test_view_maps_database_fields_and_approval_records(self) -> None:
         contributions = {item["id"]: item for item in db_fixture.CONTRIBUTIONS}
-        view = existing_indication_view(db_fixture.INDICATION, contributions)
+        label_urls = label_urls_by_document(
+            [db_fixture.DOCUMENT, db_fixture.DATED_DOCUMENT], db_fixture.URLS
+        )
+        view = existing_indication_view(db_fixture.INDICATION, contributions, label_urls)
         self.assertEqual(view["indication"], db_fixture.INDICATION["description"])
         self.assertEqual(
             view["statement_description"], db_fixture.INDICATION["statement_description"]
         )
         self.assertEqual(view["raw_cancer_types"], "breast cancer")
         self.assertEqual(view["initial_approval_date"], "2020-01-01")
+        self.assertEqual(view["initial_approval_document"], "doc:fda:example:2020-01-01")
+        self.assertEqual(view["initial_approval_label_url"], "https://example.test/2020.pdf")
         self.assertEqual(view["status"], "Approved")
 
     def test_loads_only_current_indications_reported_in_the_document(self) -> None:

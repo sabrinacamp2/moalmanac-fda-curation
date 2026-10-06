@@ -11,7 +11,12 @@ from .curate_doc_from_drugsfda_endpoint import (
     fetch_fda_record,
     get_label_version_fields,
 )
-from .moalmanac_records import FDA_AGENT_ID, load_table, require_database
+from .moalmanac_records import (
+    FDA_AGENT_ID,
+    is_dated_document,
+    load_table,
+    require_database,
+)
 
 
 def normalize_application_number(application_number: str) -> tuple[str, int]:
@@ -44,12 +49,16 @@ def resolve_curated_label_url(
 def find_curated_fda_document(
     documents: list[dict[str, Any]], identification_number: int
 ) -> dict[str, Any] | None:
-    """Find the single FDA document with the requested numeric application ID."""
+    """Find the evergreen FDA document with the requested numeric application ID.
+
+    Dated label versions share the application number and are not curation targets.
+    """
     matches = [
         document
         for document in documents
         if document.get("agent_id") == FDA_AGENT_ID
         and document.get("identification_number") == identification_number
+        and not is_dated_document(str(document.get("id")))
     ]
     if len(matches) > 1:
         ids = ", ".join(str(document.get("id")) for document in matches)

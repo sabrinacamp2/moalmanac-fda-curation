@@ -86,13 +86,18 @@ class MoalmanacDbCheckoutTest(unittest.TestCase):
                 },
             },
             load_database(database_dir),
+            label_urls={"2026-01-02": "https://example.test/label.pdf"},
             contribution_date="2026-10-02",
         )
         self.assertEqual(assembled["indications"][0]["status"], "Accelerated")
+        self.assertEqual(
+            assembled["indications"][0]["reportedIn"],
+            ["doc:fda:schema-check", "doc:fda:schema-check:2026-01-02"],
+        )
         validate_records(
             database_dir,
             {
-                "documents": [assembled["document"]],
+                "documents": [assembled["document"], *assembled["dated_documents"]],
                 "urls": assembled["urls"],
                 "indications": assembled["indications"],
                 "contributions": assembled["contributions"],

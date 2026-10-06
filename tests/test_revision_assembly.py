@@ -11,6 +11,7 @@ from unittest.mock import patch
 import db_fixture
 from moalmanac_fda_curation.core.moalmanac_records import (
     ContributionLedger,
+    DatedDocuments,
     existing_indication_view,
     next_indication_number,
 )
@@ -54,6 +55,7 @@ def write_work_dir(work: Path, **artifacts: object) -> None:
     )
     for name, payload in {**defaults, **artifacts}.items():
         (intermediate / name).write_text(json.dumps(payload))
+    db_fixture.write_changelog(intermediate, {"2026-01-02": "https://example.test/latest.pdf"})
     (review / "decisions.json").write_text(json.dumps(decisions))
 
 
@@ -91,7 +93,13 @@ class RevisionAssemblyCliTest(unittest.TestCase):
                 self.read(reviewed, "revised-document.json")["urls"],
                 db_fixture.DOCUMENT["urls"],
             )
-            for name in ("new-indications.json", "replacements.json", "contributions.json"):
+            for name in (
+                "new-indications.json",
+                "replacements.json",
+                "dated-documents.json",
+                "urls.json",
+                "contributions.json",
+            ):
                 self.assertEqual(self.read(reviewed, name), [], name)
 
     def test_cli_assembles_new_indication_with_no_selected_revisions(self) -> None:
@@ -140,10 +148,21 @@ class RevisionAssemblyCliTest(unittest.TestCase):
             reviewed = self.run_cli(root)
             new_indications = self.read(reviewed, "new-indications.json")
             contributions = self.read(reviewed, "contributions.json")
+            dated_documents = self.read(reviewed, "dated-documents.json")
+            new_urls = self.read(reviewed, "urls.json")
         self.assertEqual(len(new_indications), 1)
         self.assertEqual(new_indications[0]["id"], "ind:fda:example:2")
         self.assertEqual(new_indications[0]["description"], "New indication wording.")
-        self.assertEqual(new_indications[0]["reportedIn"], ["doc:fda:example"])
+        self.assertEqual(
+            new_indications[0]["reportedIn"], ["doc:fda:example", "doc:fda:example:2026-01-02"]
+        )
+        self.assertEqual(
+            [record["id"] for record in dated_documents], ["doc:fda:example:2026-01-02"]
+        )
+        self.assertEqual(
+            new_urls,
+            [{"id": "url:fda:example:label:2026-01-02", "url": "https://example.test/latest.pdf"}],
+        )
         self.assertEqual(
             new_indications[0]["contributions"],
             [CURATOR_CONTRIBUTION, "ctrb:fda:2026-01-02:0"],
@@ -167,7 +186,7 @@ class RevisionAssemblyCliTest(unittest.TestCase):
                             "existing_indication_id": "ind:fda:example:0",
                             "latest_indication_index": 0,
                             "existing_indication": existing_indication_view(
-                                db_fixture.INDICATION, contributions
+                                db_fixture.INDICATION, contributions, {}
                             ),
                         }],
                     },
@@ -215,12 +234,14 @@ class RevisionAssemblyCliTest(unittest.TestCase):
             written,
             [
                 "contributions.json",
+                "dated-documents.json",
                 "document-update.json",
                 "new-indications.json",
                 "replacements.json",
                 "revised-document.json",
                 "revised-url.json",
                 "url-update.json",
+                "urls.json",
             ],
         )
 
@@ -261,7 +282,7 @@ class AssembleReplacementIndicationsTest(unittest.TestCase):
                 "latest_indication_index": 1,
                 "review_label": "HER2-positive breast cancer",
                 "existing_indication": existing_indication_view(
-                    db_fixture.INDICATION, contributions
+                    db_fixture.INDICATION, contributions, {}
                 ),
             }]
         }
@@ -298,6 +319,12 @@ class AssembleReplacementIndicationsTest(unittest.TestCase):
                 next_indication_number(self.database["indications"], "doc:fda:example")
             ),
             ledger=ledger,
+            dated_documents=DatedDocuments(
+                db_fixture.DOCUMENT,
+                [db_fixture.DOCUMENT, db_fixture.DATED_DOCUMENT],
+                {"2026-01-02": "https://example.test/latest.pdf"},
+                "2026-10-02",
+            ),
             curator_contribution=lambda: ledger.reference(
                 "agent:user:vanallenlab", "2026-10-02", "Revised."
             ),
@@ -310,7 +337,9 @@ class AssembleReplacementIndicationsTest(unittest.TestCase):
         self.assertEqual(replacements[0]["id"], "ind:fda:example:1")
         self.assertEqual(replacements[0]["description"], "New indication wording.")
         self.assertEqual(replacements[0]["statement_description"], "New description.")
-        self.assertEqual(replacements[0]["reportedIn"], ["doc:fda:example"])
+        self.assertEqual(
+            replacements[0]["reportedIn"], ["doc:fda:example", "doc:fda:example:2026-01-02"]
+        )
         self.assertEqual(replacements[0]["status"], "Approved")
         self.assertEqual(replacements[0]["superseded_by"], [])
         self.assertEqual(
@@ -325,6 +354,9 @@ class AssembleReplacementIndicationsTest(unittest.TestCase):
         replacements = self.assemble()
         self.assertEqual(
             replacements[0]["contributions"], [CURATOR_CONTRIBUTION, "ctrb:fda:2020-01-01:0"]
+        )
+        self.assertEqual(
+            replacements[0]["reportedIn"], ["doc:fda:example", "doc:fda:example:2020-01-01"]
         )
 
     def test_accelerated_label_text_sets_replacement_status(self) -> None:
@@ -392,6 +424,12 @@ class AssembleNewIndicationsTest(unittest.TestCase):
                 next_indication_number(self.existing_indications, "doc:fda:example")
             ),
             ledger=ledger,
+            dated_documents=DatedDocuments(
+                db_fixture.DOCUMENT,
+                [db_fixture.DOCUMENT, db_fixture.DATED_DOCUMENT],
+                {"2026-01-02": "https://example.test/latest.pdf"},
+                "2026-10-02",
+            ),
             curator_contribution=lambda: ledger.reference(
                 "agent:user:vanallenlab", "2026-10-02", "Initial."
             ),

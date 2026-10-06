@@ -73,8 +73,7 @@ Route from the command output:
 
 After description and approval are resolved for every selected replacement, run
 `assemble-revisions --database-dir MOALMANAC_DB_ROOT` and report the paths to the
-reviewed document, URL, indication, replacement, contribution, and targeted update
-artifacts. The
-curator already compared old and new values in the preceding reviews, so this finalization
-does not require another decision. Reporting these artifacts completes the curation
-session.
+reviewed document, dated document, URL, indication, replacement, contribution, and
+targeted update artifacts. The curator already compared old and new values in the
+preceding reviews, so this finalization does not require another decision. Reporting
+these artifacts completes the curation session.

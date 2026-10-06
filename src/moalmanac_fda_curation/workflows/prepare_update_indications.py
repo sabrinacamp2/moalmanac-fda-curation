@@ -180,6 +180,7 @@ def match_review_markdown(
     latest_indications_path: Path,
     label_markdown_path: Path,
     curated_label_pdf_path: Path,
+    initial_label_pdf_path: Path | None = None,
 ) -> str:
     classification = mapping["classification"]
     if classification not in {"not_found", "uncertain"}:
@@ -230,6 +231,15 @@ def match_review_markdown(
                 f"| Therapeutics | {table_value(existing.get('raw_therapeutics'))} | {table_value(latest.get('raw_therapeutics'))} |",
             ]
         )
+    initial_date = existing.get("initial_approval_date") if isinstance(existing, dict) else None
+    initial_url = (
+        existing.get("initial_approval_label_url") if isinstance(existing, dict) else None
+    )
+    show_initial_label = (
+        initial_label_pdf_path is not None
+        and initial_url != preflight.get("curated_label_url")
+        and initial_url != preflight.get("latest_label_url")
+    )
     lines.extend(
         [
             "",
@@ -240,6 +250,11 @@ def match_review_markdown(
             "",
             "## More evidence",
             "",
+            *(
+                [f"- [Initial approval label — {initial_date}](<{initial_label_pdf_path}>)"]
+                if show_initial_label
+                else []
+            ),
             f"- [Latest-label indication extraction](<{latest_indications_path}>)",
             f"- [Mapping details](<{reconciliation_path}>)",
             "",
@@ -373,6 +388,16 @@ def main() -> int:
     if exceptions:
         assert curated_label_pdf is not None
         for position, mapping in enumerate(exceptions):
+            existing_indication = mapping.get("existing_indication") or {}
+            initial_url = existing_indication.get("initial_approval_label_url")
+            initial_label_pdf = (
+                local_label(
+                    initial_url,
+                    existing_indication.get("initial_approval_date") or "initial-approval",
+                )
+                if isinstance(initial_url, str)
+                else None
+            )
             path = match_review_dir / match_review_filename(mapping, position)
             markdown = match_review_markdown(
                 preflight,
@@ -381,6 +406,7 @@ def main() -> int:
                 latest_indications_path=latest_indications_path,
                 label_markdown_path=work_dir / "labels" / f"{stem}.md",
                 curated_label_pdf_path=curated_label_pdf,
+                initial_label_pdf_path=initial_label_pdf,
             )
             if path.exists() and not args.overwrite:
                 if path.read_text(encoding="utf-8") != markdown:

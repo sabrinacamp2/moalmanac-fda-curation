@@ -72,9 +72,23 @@ DOCUMENT = {
     "status": "Active",
 }
 
+DATED_DOCUMENT = {
+    **DOCUMENT,
+    "id": "doc:fda:example:2020-01-01",
+    "description": (
+        "Example Co. Example (examplemab) [package insert]. U.S. Food and Drug "
+        "Administration website. https://example.test/2020.pdf. Revised January 2020. "
+        "Accessed October 6, 2026."
+    ),
+    "urls": ["url:fda:example:label:2020-01-01", "url:fda:example:overview"],
+    "publication_date": "2020-01-01",
+    "status": "Deprecated",
+}
+
 URLS = [
     {"id": "url:fda:example:label", "url": "https://example.test/old.pdf"},
     {"id": "url:fda:example:overview", "url": "https://example.test/overview"},
+    {"id": "url:fda:example:label:2020-01-01", "url": "https://example.test/2020.pdf"},
 ]
 
 INDICATION = {
@@ -82,7 +96,7 @@ INDICATION = {
     "type": "Indication",
     "description": "EXAMPLE is indicated for HER2-positive breast cancer.",
     "contributions": ["ctrb:vanallenlab:2024-10-30:0", "ctrb:fda:2020-01-01:0"],
-    "reportedIn": ["doc:fda:example"],
+    "reportedIn": ["doc:fda:example", "doc:fda:example:2020-01-01"],
     "status": "Approved",
     "statement_description": (
         "The U.S. Food and Drug Administration granted approval to examplemab for "
@@ -176,7 +190,15 @@ SCHEMAS = {
             "type": {"const": "Indication"},
             "description": {"type": "string"},
             "contributions": {"type": "array", "items": {"type": "string"}},
-            "reportedIn": {"type": "array", "items": {"type": "string"}},
+            "reportedIn": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "prefixItems": [
+                    {"type": "string", "pattern": "^doc:fda:[^:]+$"},
+                    {"type": "string", "pattern": r"^doc:fda:[^:]+:\d{4}-\d{2}-\d{2}$"},
+                ],
+            },
             "status": {"enum": ["Approved", "Accelerated", "Superseded", "Withdrawn"]},
             "statement_description": {"type": "string"},
             "raw_biomarkers": nullable("string"),
@@ -200,12 +222,31 @@ def tables(**overrides: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]
     result = {
         "agents": AGENTS,
         "contributions": CONTRIBUTIONS,
-        "documents": [DOCUMENT],
+        "documents": [DOCUMENT, DATED_DOCUMENT],
         "indications": [INDICATION],
         "urls": URLS,
     }
     result.update(overrides)
     return copy.deepcopy(result)
+
+
+def write_changelog(intermediate: Path, label_urls: dict[str, str]) -> Path:
+    """Write a label changelog with one event per label date."""
+    path = intermediate / "section1-changelogs" / "Example-nda123456-section1-changelog.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    events = [
+        {
+            "event_number": number,
+            "date": label_date,
+            "change_type": "insert",
+            "label_url": label_url,
+            "before_text": None,
+            "after_text": "Example indication text.",
+        }
+        for number, (label_date, label_url) in enumerate(sorted(label_urls.items()), start=1)
+    ]
+    path.write_text(json.dumps({"events": events}), encoding="utf-8")
+    return path
 
 
 def write_database(root: Path, **overrides: list[dict[str, Any]]) -> Path:

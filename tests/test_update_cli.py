@@ -278,6 +278,8 @@ class UpdateCliTest(unittest.TestCase):
                 "indication": "Existing indication",
                 "statement_description": "Existing description",
                 "initial_approval_date": "2021-01-01",
+                "initial_approval_document": "doc:fda:opdivo:2021-01-01",
+                "initial_approval_label_url": "https://example.test/initial.pdf",
                 "status": "Approved",
             },
             "reason": "No latest counterpart.",
@@ -289,19 +291,25 @@ class UpdateCliTest(unittest.TestCase):
             latest_indications_path=Path("/tmp/latest.json"),
             label_markdown_path=Path("/tmp/latest-label.md"),
             curated_label_pdf_path=Path("/tmp/curated-label.pdf"),
+            initial_label_pdf_path=Path("/tmp/initial-label.pdf"),
         )
         self.assertIn("Existing indication not found", markdown)
         self.assertIn("Existing indication", markdown)
         self.assertIn("Existing description", markdown)
-        self.assertIn("2021-01-01", markdown)
         self.assertIn("does not establish that FDA removed", markdown)
         self.assertIn("## Review these", markdown)
         self.assertIn("## More evidence", markdown)
+        self.assertIn("[Initial approval label — 2021-01-01]", markdown)
         self.assertIn("[Previous curated label — 2025-04-11]", markdown)
         self.assertIn("[Latest label — 2026-08-12]", markdown)
         self.assertNotIn("[Latest-label PDF]", markdown)
         self.assertIn("(</tmp/curated-label.pdf>)", markdown)
+        self.assertIn("(</tmp/initial-label.pdf>)", markdown)
         self.assertNotIn("example.test/curated.pdf>)", markdown)
+        self.assertLess(
+            markdown.index("[Previous curated label"),
+            markdown.index("[Initial approval label"),
+        )
 
     def test_combined_update_command_writes_review(self) -> None:
         proposal = db_fixture.latest_proposal()
@@ -400,6 +408,7 @@ class UpdateCliTest(unittest.TestCase):
             "existing_indication": {
                 "indication": "Existing indication",
                 "initial_approval_date": "2025-04-11",
+                "initial_approval_label_url": "https://example.test/curated.pdf",
                 "status": "Approved",
                 "raw_biomarkers": "HER2-positive",
                 "raw_cancer_types": "breast cancer",
@@ -420,6 +429,7 @@ class UpdateCliTest(unittest.TestCase):
             latest_indications_path=Path("/tmp/latest.json"),
             label_markdown_path=Path("/tmp/latest-label.md"),
             curated_label_pdf_path=Path("/tmp/curated-label.pdf"),
+            initial_label_pdf_path=Path("/tmp/curated-label.pdf"),
         )
         self.assertIn("Existing indication", markdown)
         self.assertIn("Possible counterpart", markdown)
@@ -427,6 +437,7 @@ class UpdateCliTest(unittest.TestCase):
         self.assertIn("## Structured comparison", markdown)
         self.assertIn("HER2-positive", markdown)
         self.assertIn("metastatic breast cancer", markdown)
+        self.assertNotIn("[Initial approval label", markdown)
 
     def test_new_indication_summary_separates_findings_from_curation_candidates(self) -> None:
         mappings = [

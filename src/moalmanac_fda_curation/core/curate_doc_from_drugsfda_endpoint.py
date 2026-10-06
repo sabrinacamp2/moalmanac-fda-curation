@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL*")
 
 import requests
 
-from .moalmanac_records import FDA_AGENT_ID, fda_document_id, url_id
+from .moalmanac_records import FDA_AGENT_ID, fda_document_id, fda_label_citation, url_id
 
 
 def parse_args() -> argparse.Namespace:
@@ -158,17 +158,11 @@ def fda_date_to_iso(value: str) -> str:
 
 
 def get_date_fields(label_fields: dict[str, Any], accessed_date: date) -> dict[str, str]:
-    """Prepare normalized dates and citation date text."""
-    first_publication_date = fda_date_to_iso(label_fields["first_publication_date_raw"])
-    publication_date = fda_date_to_iso(label_fields["publication_date_raw"])
-    revised_text = datetime.strptime(publication_date, "%Y-%m-%d").strftime("%B %Y")
-    accessed_text = f"{accessed_date:%B} {accessed_date.day}, {accessed_date:%Y}"
-
+    """Prepare normalized ISO dates for the document and its citation."""
     return {
-        "first_publication_date": first_publication_date,
-        "publication_date": publication_date,
-        "revised_text": revised_text,
-        "accessed_text": accessed_text,
+        "first_publication_date": fda_date_to_iso(label_fields["first_publication_date_raw"]),
+        "publication_date": fda_date_to_iso(label_fields["publication_date_raw"]),
+        "accessed_date": accessed_date.isoformat(),
     }
 
 
@@ -207,22 +201,17 @@ def get_formatted_text_fields(
     """Build MOAlmanac-formatted ID, name, and description strings."""
     brand = drug_fields["brand"]
     generic = drug_fields["generic"]
-    company = drug_fields["company"]
-    label_url = label_fields["label_url"]
-    company_period = "" if company.endswith((".", "!", "?")) else "."
-
-    document_id = fda_document_id(brand)
-    name = f"{brand} ({generic}) [package insert]. FDA."
-    description = (
-        f"{company}{company_period} {brand} ({generic}) [package insert]. "
-        f"U.S. Food and Drug Administration website. {label_url}. "
-        f"Revised {date_fields['revised_text']}. Accessed {date_fields['accessed_text']}."
-    )
-
     return {
-        "document_id": document_id,
-        "name": name,
-        "description": description,
+        "document_id": fda_document_id(brand),
+        "name": f"{brand} ({generic}) [package insert]. FDA.",
+        "description": fda_label_citation(
+            company=drug_fields["company"],
+            brand=brand,
+            generic=generic,
+            label_url=label_fields["label_url"],
+            label_date=date_fields["publication_date"],
+            accessed_date=date_fields["accessed_date"],
+        ),
     }
 
 
