@@ -41,8 +41,8 @@ from .extract_indications_from_fda_label import (
     download_pdf_bytes,
 )
 from .artifacts import (
-    document_label_url,
-    load_document_artifact,
+    load_document_proposal,
+    proposal_label_url,
     resolve_document_application_number,
 )
 
@@ -525,10 +525,10 @@ def main() -> int:
     output_dir = work_dir / "intermediate" / "section1-changelogs"
     cache_dir = work_dir / "intermediate" / "section1-cache"
     historical_labels_dir = work_dir / "historical-labels"
-    document = load_document_artifact(resolve_path(args.document_json))
-    brand_name = document["drug_name_brand"]
-    application_number = resolve_document_application_number(document)
-    current_label_url = document_label_url(document)
+    proposal = load_document_proposal(resolve_path(args.document_json))
+    brand_name = proposal["document"]["drug_name_brand"]
+    application_number = resolve_document_application_number(proposal)
+    current_label_url = proposal_label_url(proposal)
 
     print(f"building {brand_name} {application_number}")
     markdown_path, json_path = build_changelog(

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from ..core.artifacts import load_json_object, write_json_atomic
+from ..core.artifacts import load_document_proposal, load_json_object, write_json_atomic
 from ..core.check_curation_preflight import check_curation_preflight
 from ..core.curate_doc_from_drugsfda_endpoint import curate_document
 from ..core.extract_indications_from_fda_label import (
@@ -25,10 +25,10 @@ from ..core.extract_indications_from_fda_label import (
 from ..core.identify_new_indications import (
     DEFAULT_MODEL as RECONCILIATION_MODEL,
     indexed_latest_indications,
-    load_existing_indications,
     map_existing_to_latest_indications,
     select_new_indication_candidates,
 )
+from ..core.moalmanac_records import load_existing_indications, require_database
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,20 +42,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--include-non-biomarker", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
-
-
-def required_database_paths(database_dir: Path) -> tuple[Path, Path, Path]:
-    root = database_dir.resolve()
-    documents = root / "referenced" / "documents.json"
-    indications = root / "referenced" / "indications.json"
-    urls = root / "referenced" / "urls.json"
-    missing = [str(path) for path in (documents, indications, urls) if not path.is_file()]
-    if missing:
-        raise FileNotFoundError(
-            "The supplied moalmanac-db path is missing required file(s): "
-            + ", ".join(missing)
-        )
-    return documents, indications, urls
 
 
 def write_once(path: Path, payload: Any, *, overwrite: bool, name: str) -> None:
@@ -105,7 +91,7 @@ def new_indication_review_markdown(
     candidates: list[dict[str, Any]],
     *,
     label_markdown_path: Path,
-    curated_label_pdf_path: Path,
+    latest_label_pdf_path: Path,
     reconciliation_path: Path,
 ) -> str:
     """Create a compact verification surface for unmatched label indications."""
@@ -139,8 +125,8 @@ def new_indication_review_markdown(
             "",
             "## Review sources",
             "",
-            f"- [Previous curated label — {preflight['curated_label_date']}](<{curated_label_pdf_path}>)",
-            f"- [Latest label — {preflight['latest_label_date']}](<{label_markdown_path}>)",
+            f"- [Latest label PDF — {preflight['latest_label_date']}](<{latest_label_pdf_path}>)",
+            f"- [Latest label Markdown — {preflight['latest_label_date']}](<{label_markdown_path}>)",
             f"- [Indication matching details](<{reconciliation_path}>)",
             "",
         ]
@@ -241,12 +227,14 @@ def match_review_markdown(
                 "| Field | Existing MOAlmanac | Latest-label candidate |",
                 "|---|---|---|",
                 f"| Biomarker | {table_value(existing.get('raw_biomarkers'))} | {table_value(latest.get('raw_biomarkers'))} |",
-                f"| Cancer type | {table_value(existing.get('raw_cancer_type'))} | {table_value(latest.get('raw_cancer_type'))} |",
+                f"| Cancer type | {table_value(existing.get('raw_cancer_types'))} | {table_value(latest.get('raw_cancer_types'))} |",
                 f"| Therapeutics | {table_value(existing.get('raw_therapeutics'))} | {table_value(latest.get('raw_therapeutics'))} |",
             ]
         )
     initial_date = existing.get("initial_approval_date") if isinstance(existing, dict) else None
-    initial_url = existing.get("initial_approval_url") if isinstance(existing, dict) else None
+    initial_url = (
+        existing.get("initial_approval_label_url") if isinstance(existing, dict) else None
+    )
     show_initial_label = (
         initial_label_pdf_path is not None
         and initial_url != preflight.get("curated_label_url")
@@ -278,9 +266,7 @@ def match_review_markdown(
 def main() -> int:
     args = parse_args()
     work_dir = args.work_dir.resolve()
-    documents_path, indications_path, urls_path = required_database_paths(
-        args.database_dir
-    )
+    database_dir = require_database(args.database_dir)
     intermediate = work_dir / "intermediate"
     review_dir = work_dir / "review"
     preflight_path = intermediate / "curation-status.json"
@@ -289,9 +275,7 @@ def main() -> int:
     review_label_dir = work_dir / "labels" / "review-sources"
     new_review_path = review_dir / "new-indications.md"
 
-    preflight = check_curation_preflight(
-        args.application_number, documents_path, urls_path
-    )
+    preflight = check_curation_preflight(args.application_number, database_dir)
     if not preflight["previously_curated"]:
         raise ValueError("Update review requires a previously curated FDA application")
     if not preflight["newer_label_available"]:
@@ -305,8 +289,8 @@ def main() -> int:
 
     document_path = intermediate / "document.proposal.json"
     if document_path.exists() and not args.overwrite:
-        document = load_json_object(document_path, "Document proposal")
-        if document.get("publication_date") != preflight["latest_label_date"]:
+        proposal = load_document_proposal(document_path)
+        if proposal["document"].get("publication_date") != preflight["latest_label_date"]:
             raise FileExistsError(
                 f"Document proposal does not use the latest label: {document_path}"
             )
@@ -317,10 +301,12 @@ def main() -> int:
             company=None,
             label_url=preflight["latest_label_url"],
         )
-        document = curate_document(document_args)
-        write_json_atomic(document_path, document)
+        proposal = curate_document(document_args)
+        write_json_atomic(document_path, proposal)
 
-    stem = output_stem(document["drug_name_brand"], preflight["application_number"])
+    stem = output_stem(
+        proposal["document"]["drug_name_brand"], preflight["application_number"]
+    )
     latest_indications_path = intermediate / f"{stem}-claude_chunked_indication_fields.json"
     if not latest_indications_path.exists() or args.overwrite:
         command = [
@@ -343,7 +329,7 @@ def main() -> int:
     latest_payload = load_json_object(
         latest_indications_path, "Latest indication artifact"
     )
-    existing = load_existing_indications(indications_path, preflight["document_id"])
+    existing = load_existing_indications(database_dir, preflight["document_id"])
     latest = indexed_latest_indications(latest_payload)
     if reconciliation_path.exists() and not args.overwrite:
         reconciliation = load_json_object(
@@ -402,19 +388,13 @@ def main() -> int:
     if exceptions:
         assert curated_label_pdf is not None
         for position, mapping in enumerate(exceptions):
-            existing_indication = mapping.get("existing_indication")
-            initial_url = (
-                existing_indication.get("initial_approval_url")
-                if isinstance(existing_indication, dict)
-                else None
-            )
-            initial_date = (
-                existing_indication.get("initial_approval_date")
-                if isinstance(existing_indication, dict)
-                else None
-            )
+            existing_indication = mapping.get("existing_indication") or {}
+            initial_url = existing_indication.get("initial_approval_label_url")
             initial_label_pdf = (
-                local_label(initial_url, initial_date or "initial-approval")
+                local_label(
+                    initial_url,
+                    existing_indication.get("initial_approval_date") or "initial-approval",
+                )
                 if isinstance(initial_url, str)
                 else None
             )
@@ -447,7 +427,7 @@ def main() -> int:
             groups["new"],
             new_candidates,
             label_markdown_path=work_dir / "labels" / f"{stem}.md",
-            curated_label_pdf_path=curated_label_pdf,
+            latest_label_pdf_path=local_label_paths[preflight["latest_label_url"]],
             reconciliation_path=reconciliation_path,
         )
         if new_review_path.exists() and not args.overwrite:

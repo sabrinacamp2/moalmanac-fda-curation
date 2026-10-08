@@ -29,7 +29,7 @@ from .extract_indication_descriptions import (
 )
 from .artifacts import (
     file_sha256,
-    load_document_artifact,
+    load_document_proposal,
     write_json_atomic,
 )
 
@@ -108,7 +108,7 @@ def indication_selector_inputs(
             "indication_index": index,
             "indication": indication["indication"],
             "raw_biomarkers": indication.get("raw_biomarkers"),
-            "raw_cancer_type": indication.get("raw_cancer_type"),
+            "raw_cancer_types": indication.get("raw_cancer_types"),
             "raw_therapeutics": indication.get("raw_therapeutics"),
         }
         for index, indication in enumerate(indications)
@@ -288,7 +288,7 @@ def main() -> int:
             f"{output_path} already exists. Use --overwrite to rewrite it."
         )
 
-    document = load_document_artifact(document_path)
+    document = load_document_proposal(document_path)["document"]
     indication_payload = load_chunked_indication_fields(indication_fields_path)
     indications = indication_payload["indications"]
     label_markdown = label_markdown_path.read_text(encoding="utf-8")

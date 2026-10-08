@@ -45,10 +45,10 @@ DEFAULT_MODEL = "claude-sonnet-4-5"
 DEFAULT_MAX_TOKENS = 4096
 
 from .artifacts import (
-    document_label_url,
-    load_document_artifact,
+    load_document_proposal,
     load_json_object,
     partial_output_path,
+    proposal_label_url,
     resolve_document_application_number,
     write_json_atomic,
 )
@@ -324,7 +324,7 @@ For each indication, return:
   indication during curator review. Prefer disease, biomarker, treatment setting, and
   a meaningful prior-treatment qualifier; do not include the drug name.
 - raw_biomarkers: biomarker, molecular feature, expression status, mutation, genomic exclusion, or test-defined status directly used to select patients. Use null if none is present.
-- raw_cancer_type: the disease or cancer type phrase from the indication.
+- raw_cancer_types: the disease or cancer type phrase from the indication.
 - raw_therapeutics: the therapy or therapy combination phrase from the indication.
   In this field only, write the label drug as "{brand_name} ({generic_name})".
 - highlights_drug_class_used: true only if the indication sentence uses the supplied
@@ -385,7 +385,7 @@ def call_claude_for_indication_fields(
         indication: str
         review_label: str
         raw_biomarkers: str | None = None
-        raw_cancer_type: str | None = None
+        raw_cancer_types: str | None = None
         raw_therapeutics: str | None = None
         highlights_drug_class_used: bool = False
 
@@ -547,11 +547,11 @@ def extract_indications_from_label_url(
 def main() -> int:
     """Run the CLI and print the written output paths."""
     args = parse_args()
-    document = load_document_artifact(resolve_path(args.document_json))
-    label_url = document_label_url(document)
-    brand_name = document["drug_name_brand"]
-    generic_name = document["drug_name_generic"]
-    application_number = resolve_document_application_number(document)
+    proposal = load_document_proposal(resolve_path(args.document_json))
+    label_url = proposal_label_url(proposal)
+    brand_name = proposal["document"]["drug_name_brand"]
+    generic_name = proposal["document"]["drug_name_generic"]
+    application_number = resolve_document_application_number(proposal)
     output_dir = resolve_path(args.output_dir)
     labels_dir = output_dir / "labels"
     indications_dir = output_dir / "intermediate"

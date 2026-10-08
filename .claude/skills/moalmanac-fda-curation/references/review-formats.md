@@ -27,9 +27,9 @@ For indication extraction, state that the command reads the selected label's Ind
 and Usage section and produces candidates with source provenance for selection.
 
 For the post-selection preparation phase, state that the commands generate descriptions,
-download historical labels, propose initial approval dates, and prepare review files for
-only the selected candidates. Explain once before the uninterrupted phase rather than
-once per internal step.
+download historical labels, propose initial approval dates and approval status, and
+prepare review files for only the selected candidates. Explain once before the
+uninterrupted phase rather than once per internal step.
 
 ## Document review in chat
 
@@ -75,17 +75,18 @@ descriptions or approval matching until the candidate set is explicit.
 
 Present each possible revision before preparing detailed curation reviews. Explain that
 the tool intentionally surfaces small wording changes as well as substantive ones, and
-this screening decides whether the change is meaningful enough to continue reviewing.
+this screening decides whether the change is meaningful enough to replace the existing
+indication with a new record.
 
 ```markdown
 [Open the possible revision](<absolute-path-to/review/revision-screening/<slug>.md>)
 
 The tool found a source-text difference associated with this indication. Decide whether
-it is meaningful enough to continue reviewing for a MOAlmanac update.
+it is meaningful enough to replace the existing MOAlmanac indication with a new record.
 
-1. Continue with an update using the latest-label proposal
-2. Edit the proposal, then continue with an update
-3. This change does not warrant an update; keep the existing record
+1. Replace it using the latest-label proposal
+2. Edit the proposal, then replace it
+3. This change does not warrant a replacement; keep the existing record
 4. Leave unresolved
 5. Ask a question
 ```
@@ -114,30 +115,35 @@ or say that nothing remains to review when no clinical detail was added.
 1. Accept
 2. Inspect earlier events
 3. Choose another event
-4. Ask a question
+4. Change the approval status
+5. Ask a question
 ```
 
 The approval file repeats the current curator-reviewed indication before the date
 evidence so the curator can judge clinical equivalence without changing context. Its
 before/after evidence is copied directly from the selected changelog event, and it links
-to that numbered event in the full local changelog.
+to that numbered event in the full local changelog. It also states the proposed
+approval status, `Approved` or `Accelerated`, and the label wording that status is based
+on. Record a status change as an approval edit, for example
+`--override 'status="Accelerated"'`.
 
-For a revised indication, the same file is titled as a label date and URL review. Ask the
-curator to consider two questions separately: whether the selected event is the earliest
-post-baseline label that supports the revised wording, and whether the wording change is
-meaningful enough to replace the existing MOAlmanac date and URL. The curator may keep
-the existing date and URL when the newer wording does not warrant changing the record's
-approval provenance. Present these options:
+For a replacement of a changed indication, the same file is titled as an approval date
+and status review. Ask the curator to consider two questions separately: whether the
+selected event is the earliest post-baseline label that supports the revised wording,
+and which approval date the new record should carry. The proposed date fits when the
+revised wording represents a new approval; the existing approval date fits when it does
+not. Present these options:
 
-1. Use the proposed label date and URL
-2. Keep the existing MOAlmanac date and URL
+1. Use the proposed approval date
+2. Keep the existing MOAlmanac approval date
 3. Inspect earlier events
 4. Choose another event
-5. Leave unresolved
-6. Ask a question
+5. Change the approval status
+6. Leave unresolved
+7. Ask a question
 
-When the curator keeps the existing values, let the tool retrieve them from the existing
-MOAlmanac record:
+When the curator keeps the existing approval date, let the tool retrieve it from the
+existing MOAlmanac record:
 
 ```bash
 moalmanac-fda-curation record-decision \
@@ -145,9 +151,11 @@ moalmanac-fda-curation record-decision \
   --stage approval \
   --indication-index INDEX \
   --decision edited \
-  --keep-existing-field initial_approval_date \
-  --keep-existing-field initial_approval_url
+  --keep-existing-field initial_approval_date
 ```
+
+Add `--keep-existing-field status` when the curator also keeps the existing approval
+status.
 
 ## Indication mapping review in chat
 

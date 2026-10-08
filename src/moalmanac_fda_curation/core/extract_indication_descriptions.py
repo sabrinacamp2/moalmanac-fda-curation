@@ -42,7 +42,7 @@ DEFAULT_AGENCY_NAME = "The U.S. Food and Drug Administration"
 
 from .artifacts import (
     file_sha256,
-    load_document_artifact,
+    load_document_proposal,
     load_json_object,
     partial_output_path,
     write_json_atomic,
@@ -234,7 +234,7 @@ def build_description_input(
         "generic_name": generic_name,
         "indication": indication["indication"],
         "raw_biomarkers": indication.get("raw_biomarkers"),
-        "raw_cancer_type": indication.get("raw_cancer_type"),
+        "raw_cancer_types": indication.get("raw_cancer_types"),
         "raw_therapeutics": indication.get("raw_therapeutics"),
         "supporting_label_sections": supporting_label_sections,
     }
@@ -264,7 +264,7 @@ def build_clinical_studies_selector_prompt(
         "generic_name": description_input["generic_name"],
         "indication": description_input["indication"],
         "raw_biomarkers": description_input.get("raw_biomarkers"),
-        "raw_cancer_type": description_input.get("raw_cancer_type"),
+        "raw_cancer_types": description_input.get("raw_cancer_types"),
         "raw_therapeutics": description_input.get("raw_therapeutics"),
     }
     clinical_studies_with_lines = "\n".join(numbered_lines(clinical_studies))
@@ -750,7 +750,7 @@ def build_description_candidates(
                 "indication_index": indication_index,
                 "source_chunk_index": indication.get("source_chunk_index"),
                 "indication": indication["indication"],
-                "description": description_result["description"],
+                "statement_description": description_result["description"],
                 "clinical_detail_used": description_result.get("clinical_detail_used", False),
                 "clinical_detail_text": description_result.get("clinical_detail_text"),
                 "clinical_detail_purpose": description_result.get("clinical_detail_purpose"),
@@ -811,7 +811,7 @@ def main() -> int:
     """Run the description drafting workflow and write JSON output."""
     args = parse_args()
 
-    document = load_document_artifact(resolve_path(args.document_json))
+    document = load_document_proposal(resolve_path(args.document_json))["document"]
     args.brand_name = document["drug_name_brand"]
     args.document_id = document["id"]
     args.generic_name = document["drug_name_generic"]

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Create a MOAlmanac FDA document entry from the openFDA drug/drugsfda endpoint.
+"""Create a MOAlmanac FDA document proposal from the openFDA drug/drugsfda endpoint.
+
+The proposal holds one `documents.json` record and the `urls.json` records it cites.
 
 Example:
     python curate_doc_from_drugsfda_endpoint.py --application-number NDA211651
@@ -20,6 +22,8 @@ from urllib.parse import urlparse
 warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL*")
 
 import requests
+
+from .moalmanac_records import FDA_AGENT_ID, fda_document_id, fda_label_citation, url_id
 
 
 def parse_args() -> argparse.Namespace:
@@ -154,17 +158,11 @@ def fda_date_to_iso(value: str) -> str:
 
 
 def get_date_fields(label_fields: dict[str, Any], accessed_date: date) -> dict[str, str]:
-    """Prepare normalized dates and citation date text."""
-    first_publication_date = fda_date_to_iso(label_fields["first_publication_date_raw"])
-    publication_date = fda_date_to_iso(label_fields["publication_date_raw"])
-    revised_text = datetime.strptime(publication_date, "%Y-%m-%d").strftime("%B %Y")
-    accessed_text = f"{accessed_date:%B} {accessed_date.day}, {accessed_date:%Y}"
-
+    """Prepare normalized ISO dates for the document and its citation."""
     return {
-        "first_publication_date": first_publication_date,
-        "publication_date": publication_date,
-        "revised_text": revised_text,
-        "accessed_text": accessed_text,
+        "first_publication_date": fda_date_to_iso(label_fields["first_publication_date_raw"]),
+        "publication_date": fda_date_to_iso(label_fields["publication_date_raw"]),
+        "accessed_date": accessed_date.isoformat(),
     }
 
 
@@ -173,7 +171,16 @@ def get_drug_and_company_fields(
     company_override: str | None = None,
 ) -> dict[str, str]:
     """Prepare brand, generic, and company display fields."""
-    openfda = fda_record["openfda"]
+    openfda = fda_record.get("openfda") or {}
+    if not openfda.get("brand_name") or not openfda.get("generic_name"):
+        application_number = fda_record.get("application_number", "<unknown>")
+        raise ValueError(
+            f"drug/drugsfda record for {application_number} has no openfda "
+            "brand_name/generic_name (openFDA's SPL-to-application linkage did "
+            "not populate for this record). This tool has no supported fallback "
+            "for deriving normalized brand/generic names from another field; "
+            "curate this application manually."
+        )
 
     brand = openfda["brand_name"][0].title()
     generic = openfda["generic_name"][0].lower()
@@ -194,58 +201,61 @@ def get_formatted_text_fields(
     """Build MOAlmanac-formatted ID, name, and description strings."""
     brand = drug_fields["brand"]
     generic = drug_fields["generic"]
-    company = drug_fields["company"]
-    label_url = label_fields["label_url"]
-    company_period = "" if company.endswith((".", "!", "?")) else "."
-
-    brand_slug = re.sub(r"[^a-z0-9]+", "_", brand.lower()).strip("_")
-    document_id = f"doc:fda.{brand_slug}"
-    name = f"{brand} ({generic}) [package insert]. FDA."
-    description = (
-        f"{company}{company_period} {brand} ({generic}) [package insert]. "
-        f"U.S. Food and Drug Administration website. {label_url}. "
-        f"Revised {date_fields['revised_text']}. Accessed {date_fields['accessed_text']}."
-    )
-
     return {
-        "document_id": document_id,
-        "name": name,
-        "description": description,
+        "document_id": fda_document_id(brand),
+        "name": f"{brand} ({generic}) [package insert]. FDA.",
+        "description": fda_label_citation(
+            company=drug_fields["company"],
+            brand=brand,
+            generic=generic,
+            label_url=label_fields["label_url"],
+            label_date=date_fields["publication_date"],
+            accessed_date=date_fields["accessed_date"],
+        ),
     }
 
 
-def build_document(
+def build_document_proposal(
     application_fields: dict[str, Any],
     label_fields: dict[str, Any],
     date_fields: dict[str, str],
     drug_fields: dict[str, str],
     text_fields: dict[str, str],
 ) -> dict[str, Any]:
-    """Assemble the final MOAlmanac documents.json entry."""
+    """Assemble one documents.json record and the urls.json records it cites."""
+    document_id = text_fields["document_id"]
+    label_url_id = url_id(document_id, "label")
+    overview_url_id = url_id(document_id, "overview")
     return {
-        "id": text_fields["document_id"],
-        "type": "Document",
-        "documentType": "Regulatory approval",
-        "name": text_fields["name"],
-        "title": None,
-        "aliases": [],
-        "description": text_fields["description"],
-        "urls": [label_fields["label_url"], application_fields["overview_url"]],
-        "doi": None,
-        "pmid": None,
-        "agent_id": "fda",
-        "company": drug_fields["company"],
-        "drug_name_brand": drug_fields["brand"],
-        "drug_name_generic": drug_fields["generic"],
-        "first_publication_date": date_fields["first_publication_date"],
-        "identification_number": application_fields["identification_number"],
-        "publication_date": date_fields["publication_date"],
-        "status": "Active",
+        "document": {
+            "id": document_id,
+            "type": "Document",
+            "documentType": "Regulatory approval",
+            "name": text_fields["name"],
+            "title": None,
+            "aliases": [],
+            "description": text_fields["description"],
+            "urls": [label_url_id, overview_url_id],
+            "doi": None,
+            "pmid": None,
+            "agent_id": FDA_AGENT_ID,
+            "company": drug_fields["company"],
+            "drug_name_brand": drug_fields["brand"],
+            "drug_name_generic": drug_fields["generic"],
+            "first_publication_date": date_fields["first_publication_date"],
+            "identification_number": application_fields["identification_number"],
+            "publication_date": date_fields["publication_date"],
+            "status": "Active",
+        },
+        "urls": [
+            {"id": label_url_id, "url": label_fields["label_url"]},
+            {"id": overview_url_id, "url": application_fields["overview_url"]},
+        ],
     }
 
 
 def curate_document(args: argparse.Namespace) -> dict[str, Any]:
-    """Run each curation step and return the final document entry."""
+    """Run each curation step and return the document proposal."""
     fda_record = fetch_fda_record(args.application_number)
 
     application_fields = get_application_identifiers(fda_record)
@@ -254,7 +264,7 @@ def curate_document(args: argparse.Namespace) -> dict[str, Any]:
     drug_fields = get_drug_and_company_fields(fda_record, args.company)
     text_fields = get_formatted_text_fields(drug_fields, label_fields, date_fields)
 
-    return build_document(
+    return build_document_proposal(
         application_fields=application_fields,
         label_fields=label_fields,
         date_fields=date_fields,
@@ -264,10 +274,10 @@ def curate_document(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
-    """Create and print or write one FDA document entry."""
+    """Create and print or write one FDA document proposal."""
     args = parse_args()
-    document = curate_document(args)
-    text = json.dumps(document, indent=2) + "\n"
+    proposal = curate_document(args)
+    text = json.dumps(proposal, indent=2) + "\n"
 
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

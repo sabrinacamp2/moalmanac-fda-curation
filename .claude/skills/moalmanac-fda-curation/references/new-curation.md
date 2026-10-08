@@ -28,9 +28,9 @@ correct it, record the replacement and confirm again.
 
 Keep supported batch operations batched. Do not insert curator confirmation between
 internal stages when no review occurs. Run `assemble-reviewed` only when every retained
-indication has complete explicit decisions. After assembly, report the reviewed document
-and indication artifact paths and the number of indications produced. This completes the
-curation session.
+indication has complete explicit decisions. After assembly, report the reviewed document,
+dated document, URL, indication, and contribution artifact paths and the number of
+indications produced. This completes the curation session.
 
 ## Review descriptions
 

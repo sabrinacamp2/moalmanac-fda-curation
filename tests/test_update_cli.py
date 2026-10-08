@@ -8,6 +8,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+import db_fixture
 from moalmanac_fda_curation import cli
 from moalmanac_fda_curation.core.match_indication_approval_dates_from_changelog import (
     build_changelog_match_prompt,
@@ -166,7 +167,7 @@ class UpdateCliTest(unittest.TestCase):
             argv = [
                 "check-curation-status",
                 "--application-number", "BLA125554",
-                "--documents-json", str(root / "documents.json"),
+                "--database-dir", str(root / "moalmanac-db"),
                 "--output-json", str(output),
             ]
             with patch("sys.argv", argv), patch.object(
@@ -178,12 +179,9 @@ class UpdateCliTest(unittest.TestCase):
     def test_reconciliation_persists_new_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            existing_path = root / "existing.json"
+            database = db_fixture.write_database(root / "moalmanac-db")
             latest_path = root / "latest.json"
             output = root / "reconciliation.json"
-            existing_path.write_text(json.dumps([
-                {"id": "ind:1", "document_id": "doc:1", "indication": "Old"}
-            ]))
             latest_path.write_text(json.dumps({"indications": [
                 {"indication": "New", "raw_biomarkers": "ALK"}
             ]}))
@@ -202,8 +200,8 @@ class UpdateCliTest(unittest.TestCase):
             }
             argv = [
                 "reconcile-indications",
-                "--existing-indications-json", str(existing_path),
-                "--document-id", "doc:1",
+                "--database-dir", str(database),
+                "--document-id", "doc:fda:example",
                 "--latest-indications-json", str(latest_path),
                 "--output-json", str(output),
             ]
@@ -211,8 +209,13 @@ class UpdateCliTest(unittest.TestCase):
                 reconcile_indications,
                 "map_existing_to_latest_indications",
                 return_value=mapped,
-            ):
+            ) as mapper:
                 self.assertEqual(reconcile_indications.main(), 0)
+            existing = mapper.call_args.args[0]
+            self.assertEqual(existing[0]["id"], "ind:fda:example:0")
+            self.assertEqual(
+                existing[0]["indication"], db_fixture.INDICATION["description"]
+            )
             artifact = json.loads(output.read_text())
             self.assertEqual(
                 artifact["new_indication_candidates"][0]["indication"], "New"
@@ -220,18 +223,11 @@ class UpdateCliTest(unittest.TestCase):
             self.assertTrue(artifact["biomarker_only"])
 
     def test_prepare_label_history_prints_a_reusable_cache(self) -> None:
-        document = {
-            "id": "doc:fda.example",
-            "drug_name_brand": "Example",
-            "drug_name_generic": "examplemab",
-            "identification_number": 123456,
-            "urls": ["https://example.test/latest.pdf"],
-        }
         with tempfile.TemporaryDirectory() as directory:
             work_dir = Path(directory).resolve()
             document_path = work_dir / "intermediate" / "document.proposal.json"
             document_path.parent.mkdir(parents=True)
-            document_path.write_text(json.dumps(document))
+            document_path.write_text(json.dumps(db_fixture.latest_proposal()))
             cache_path = (
                 work_dir
                 / "intermediate"
@@ -276,13 +272,15 @@ class UpdateCliTest(unittest.TestCase):
         }
         mapping = {
             "classification": "not_found",
-            "existing_indication_id": "ind:fda.opdivo:1",
+            "existing_indication_id": "ind:fda:opdivo:1",
             "existing_indication": {
-                "id": "ind:fda.opdivo:1",
+                "id": "ind:fda:opdivo:1",
                 "indication": "Existing indication",
-                "description": "Existing description",
+                "statement_description": "Existing description",
                 "initial_approval_date": "2021-01-01",
-                "initial_approval_url": "https://example.test/initial.pdf",
+                "initial_approval_document": "doc:fda:opdivo:2021-01-01",
+                "initial_approval_label_url": "https://example.test/initial.pdf",
+                "status": "Approved",
             },
             "reason": "No latest counterpart.",
         }
@@ -314,20 +312,19 @@ class UpdateCliTest(unittest.TestCase):
         )
 
     def test_combined_update_command_writes_review(self) -> None:
-        document = {
-            "id": "doc:fda.opdivo",
-            "type": "Document",
-            "drug_name_brand": "Opdivo",
-            "drug_name_generic": "nivolumab",
-            "identification_number": 125554,
-            "publication_date": "2026-08-12",
-            "urls": ["https://example.test/latest.pdf"],
-        }
+        proposal = db_fixture.latest_proposal()
+        proposal["document"].update(
+            {
+                "drug_name_brand": "Opdivo",
+                "drug_name_generic": "nivolumab",
+                "publication_date": "2026-08-12",
+            }
+        )
         preflight = {
             "application_number": "BLA125554",
             "previously_curated": True,
             "newer_label_available": True,
-            "document_id": "doc:fda.opdivo",
+            "document_id": "doc:fda:example",
             "curated_label_date": "2025-04-11",
             "curated_label_url": "https://example.test/curated.pdf",
             "latest_label_date": "2026-08-12",
@@ -351,17 +348,7 @@ class UpdateCliTest(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
-            database = root / "moalmanac-db" / "referenced"
-            database.mkdir(parents=True)
-            (database / "documents.json").write_text("[]")
-            (database / "indications.json").write_text(json.dumps([
-                {
-                    "id": "ind:1",
-                    "document_id": "doc:fda.opdivo",
-                    "indication": "Existing",
-                }
-            ]))
-            (database / "urls.json").write_text("[]")
+            db_fixture.write_database(root / "moalmanac-db")
             work_dir = root / "run"
 
             def extract(command: list[str], check: bool) -> None:
@@ -388,7 +375,7 @@ class UpdateCliTest(unittest.TestCase):
                 "check_curation_preflight",
                 return_value=preflight,
             ), patch.object(
-                prepare_update_indications, "curate_document", return_value=document
+                prepare_update_indications, "curate_document", return_value=proposal
             ), patch.object(
                 prepare_update_indications.subprocess, "run", side_effect=extract
             ), patch.object(
@@ -421,15 +408,16 @@ class UpdateCliTest(unittest.TestCase):
             "existing_indication": {
                 "indication": "Existing indication",
                 "initial_approval_date": "2025-04-11",
-                "initial_approval_url": "https://example.test/curated.pdf",
+                "initial_approval_label_url": "https://example.test/curated.pdf",
+                "status": "Approved",
                 "raw_biomarkers": "HER2-positive",
-                "raw_cancer_type": "breast cancer",
+                "raw_cancer_types": "breast cancer",
                 "raw_therapeutics": "Example drug",
             },
             "latest_indication": {
                 "indication": "Possible counterpart",
                 "raw_biomarkers": "HER2 positive",
-                "raw_cancer_type": "metastatic breast cancer",
+                "raw_cancer_types": "metastatic breast cancer",
                 "raw_therapeutics": "Example drug with chemotherapy",
             },
             "reason": "Possible split.",
@@ -508,14 +496,19 @@ class UpdateCliTest(unittest.TestCase):
             mappings,
             [],
             label_markdown_path=Path("/tmp/label.md"),
-            curated_label_pdf_path=Path("/tmp/curated-label.pdf"),
+            latest_label_pdf_path=Path("/tmp/latest-label.pdf"),
             reconciliation_path=Path("/tmp/reconciliation.json"),
         )
         self.assertIn("## 2 — Advanced RCC", markdown)
         self.assertIn("- Biomarker: none", markdown)
         self.assertIn("> AFINITOR is indicated for advanced RCC.", markdown)
-        self.assertIn("[Previous curated label — 2022-02-01]", markdown)
-        self.assertIn("[Latest label — 2026-06-01](</tmp/label.md>)", markdown)
+        self.assertIn(
+            "[Latest label PDF — 2026-06-01](</tmp/latest-label.pdf>)", markdown
+        )
+        self.assertIn(
+            "[Latest label Markdown — 2026-06-01](</tmp/label.md>)", markdown
+        )
+        self.assertNotIn("Previous curated label", markdown)
         self.assertIn("[Indication matching details]", markdown)
         self.assertNotIn("Source chunk", markdown)
         self.assertNotIn("Match assessment", markdown)
@@ -529,25 +522,21 @@ class UpdateCliTest(unittest.TestCase):
             status = {
                 "previously_curated": True,
                 "newer_label_available": True,
-                "document_id": "doc:fda.example",
+                "document_id": "doc:fda:example",
                 "curated_label_url": "https://example.test/old.pdf",
                 "latest_label_url": "https://example.test/new.pdf",
                 "curated_label_date": "2025-04-11",
                 "latest_label_date": "2026-08-12",
             }
             (intermediate / "curation-status.json").write_text(json.dumps(status))
-            database = root / "moalmanac-db" / "referenced"
-            database.mkdir(parents=True)
-            indications = database / "indications.json"
-            indications.write_text("[]")
+            db_fixture.write_database(root / "moalmanac-db")
             (intermediate / "revision-assessment.json").write_text(json.dumps({
                 "verified": True,
                 "assessments": [{
-                    "existing_indication_id": "ind:fda.example:0",
+                    "existing_indication_id": "ind:fda:example:0",
                     "status": "revised",
                     "existing_indication": {
-                        "id": "ind:fda.example:0",
-                        "document_id": "doc:fda.example",
+                        "id": "ind:fda:example:0",
                         "indication": "Old wording",
                     },
                     "relevant_hunk_ids": ["hunk-1"],
@@ -561,7 +550,7 @@ class UpdateCliTest(unittest.TestCase):
             }))
             (intermediate / "indication-matches.json").write_text(json.dumps({
                 "mappings": [{
-                    "existing_indication_id": "ind:fda.example:0",
+                    "existing_indication_id": "ind:fda:example:0",
                     "latest_indication_index": 2,
                     "classification": "matched",
                     "latest_indication": {
@@ -604,7 +593,7 @@ class UpdateCliTest(unittest.TestCase):
             self.assertIn("--revision-assessment-json", command)
             self.assertIn("2", command)
             targets = json.loads((intermediate / "revision-targets.json").read_text())
-            self.assertEqual(targets["targets"][0]["existing_indication_id"], "ind:fda.example:0")
+            self.assertEqual(targets["targets"][0]["existing_indication_id"], "ind:fda:example:0")
             self.assertEqual(
                 targets["targets"][0]["label_changes"][0]["hunk_id"], "hunk-1"
             )
@@ -616,8 +605,8 @@ class UpdateCliTest(unittest.TestCase):
             output.write_text("{}")
             argv = [
                 "reconcile-indications",
-                "--existing-indications-json", str(root / "unused.json"),
-                "--document-id", "doc:1",
+                "--database-dir", str(root / "unused-moalmanac-db"),
+                "--document-id", "doc:fda:example",
                 "--latest-indications-json", str(root / "unused-latest.json"),
                 "--output-json", str(output),
             ]

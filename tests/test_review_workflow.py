@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import db_fixture
+from moalmanac_fda_curation.review import assembly as assembly_module
 from moalmanac_fda_curation.review.assembly import assemble_reviewed
 from moalmanac_fda_curation.review import decisions as decision_module
 from moalmanac_fda_curation.review.packets import (
@@ -39,7 +41,7 @@ class ReviewWorkflowTest(unittest.TestCase):
                     "latest_indication_index": 4,
                     "existing_indication": {
                         "initial_approval_date": "2020-06-29",
-                        "initial_approval_url": "https://example.test/original.pdf",
+                        "status": "Accelerated",
                     },
                 }]
             }))
@@ -47,23 +49,50 @@ class ReviewWorkflowTest(unittest.TestCase):
                 existing_field_overrides(
                     work_dir,
                     4,
-                    ["initial_approval_date", "initial_approval_url"],
+                    ["initial_approval_date", "status"],
                 ),
                 {
                     "initial_approval_date": "2020-06-29",
-                    "initial_approval_url": "https://example.test/original.pdf",
+                    "status": "Accelerated",
                 },
             )
 
     def setUp(self) -> None:
-        self.document = {
-            "id": "doc:fda.example",
-            "type": "Document",
-            "drug_name_brand": "Example",
-            "drug_name_generic": "examplemab",
-            "identification_number": 123456,
-            "publication_date": "2026-01-02",
-            "urls": ["https://example.test/current.pdf"],
+        self.proposal = {
+            "document": {
+                "id": "doc:fda:example",
+                "type": "Document",
+                "documentType": "Regulatory approval",
+                "name": "Example (examplemab) [package insert]. FDA.",
+                "title": None,
+                "aliases": [],
+                "description": (
+                    "Example Co. Example (examplemab) [package insert]. U.S. Food and "
+                    "Drug Administration website. https://example.test/current.pdf. "
+                    "Revised January 2026. Accessed February 1, 2026."
+                ),
+                "urls": ["url:fda:example:label", "url:fda:example:overview"],
+                "doi": None,
+                "pmid": None,
+                "agent_id": "agent:org:fda",
+                "company": "Example Co.",
+                "drug_name_brand": "Example",
+                "drug_name_generic": "examplemab",
+                "first_publication_date": "2026-01-02",
+                "identification_number": 123456,
+                "publication_date": "2026-01-02",
+                "status": "Active",
+            },
+            "urls": [
+                {"id": "url:fda:example:label", "url": "https://example.test/current.pdf"},
+                {"id": "url:fda:example:overview", "url": "https://example.test/overview"},
+            ],
+        }
+        # The fixture database has not curated this application yet.
+        self.database = db_fixture.tables(documents=[], indications=[], urls=[])
+        self.label_urls = {
+            "2020-01-01": "https://example.test/2020.pdf",
+            "2026-01-02": "https://example.test/initial.pdf",
         }
         self.indications = {
             "source_chunks": [
@@ -83,7 +112,7 @@ class ReviewWorkflowTest(unittest.TestCase):
                     "source_chunk_index": 0,
                     "highlights_drug_class_used": True,
                     "raw_biomarkers": "RET-positive",
-                    "raw_cancer_type": "NSCLC",
+                    "raw_cancer_types": "NSCLC",
                     "raw_therapeutics": "Example (examplemab)",
                 },
                 {
@@ -92,7 +121,7 @@ class ReviewWorkflowTest(unittest.TestCase):
                     "source_chunk_index": 0,
                     "highlights_drug_class_used": False,
                     "raw_biomarkers": None,
-                    "raw_cancer_type": "other cancer",
+                    "raw_cancer_types": "other cancer",
                     "raw_therapeutics": "Example (examplemab)",
                 },
             ],
@@ -101,7 +130,7 @@ class ReviewWorkflowTest(unittest.TestCase):
             "indications": [
                 {
                     "indication_index": 0,
-                    "description": "FDA granted approval to examplemab for RET-positive NSCLC.",
+                    "statement_description": "FDA granted approval to examplemab for RET-positive NSCLC.",
                     "clinical_detail_used": False,
                     "supporting_label_section_selections": [],
                 }
@@ -128,7 +157,7 @@ class ReviewWorkflowTest(unittest.TestCase):
 
     def test_packet_contains_one_indication_and_highlights(self) -> None:
         packet = build_stage_packet(
-            "indication", self.document, self.indications, indication_index=0
+            "indication", self.proposal, self.indications, indication_index=0
         )
         self.assertEqual(packet["display_name"], "RET-positive NSCLC")
         self.assertTrue(packet["fda_highlights_source"]["used_by_pipeline"])
@@ -148,7 +177,7 @@ class ReviewWorkflowTest(unittest.TestCase):
         }
         description_packet = build_stage_packet(
             "description",
-            self.document,
+            self.proposal,
             self.indications,
             indication_index=0,
             descriptions=self.descriptions,
@@ -156,7 +185,7 @@ class ReviewWorkflowTest(unittest.TestCase):
         )
         approval_packet = build_stage_packet(
             "approval",
-            self.document,
+            self.proposal,
             self.indications,
             indication_index=0,
             date_matches=self.dates,
@@ -180,19 +209,19 @@ class ReviewWorkflowTest(unittest.TestCase):
         decisions["indications"]["0"] = {
             "indication": {
                 "decision": "edited",
-                "overrides": {"raw_cancer_type": "non-small cell lung cancer"},
+                "overrides": {"raw_cancer_types": "non-small cell lung cancer"},
             }
         }
         packet = build_stage_packet(
             "indication",
-            self.document,
+            self.proposal,
             self.indications,
             indication_index=0,
             decisions=decisions,
         )
         markdown = indication_markdown(packet)
         self.assertIn("Resolved curator edit", markdown)
-        self.assertIn('"raw_cancer_type": "non-small cell lung cancer"', markdown)
+        self.assertIn('"raw_cancer_types": "non-small cell lung cancer"', markdown)
 
     def test_revision_screening_decisions_use_explicit_outcomes(self) -> None:
         decisions = empty_decisions()
@@ -214,7 +243,7 @@ class ReviewWorkflowTest(unittest.TestCase):
             )
 
     def test_candidate_markdown_is_a_short_biomarker_screen(self) -> None:
-        packet = build_stage_packet("candidates", self.document, self.indications)
+        packet = build_stage_packet("candidates", self.proposal, self.indications)
         markdown = candidates_markdown(packet)
         self.assertIn("RET-positive NSCLC", markdown)
         self.assertIn(self.indications["indications"][0]["indication"], markdown)
@@ -226,13 +255,19 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.assertEqual(packet["candidates"][0]["indication_index"], 0)
         self.assertIn("fda_indications_and_usage_excerpt", packet["candidates"][0])
 
-    def test_document_markdown_omits_fda_url_but_packet_retains_it(self) -> None:
-        packet = build_stage_packet("document", self.document)
+    def test_document_markdown_omits_url_fields_but_packet_retains_them(self) -> None:
+        packet = build_stage_packet("document", self.proposal)
         markdown = document_markdown(packet)
-        self.assertNotIn("https://example.test/current.pdf", markdown)
+        self.assertNotIn('"urls"', markdown)
+        self.assertNotIn("url:fda:example:label", markdown)
+        self.assertNotIn("https://example.test/overview", markdown)
         self.assertEqual(
-            packet["pipeline_document_proposal"]["urls"],
-            ["https://example.test/current.pdf"],
+            packet["pipeline_url_records"][0]["url"],
+            "https://example.test/current.pdf",
+        )
+        self.assertEqual(
+            packet["curation_target"]["selected_label_url"],
+            "https://example.test/current.pdf",
         )
 
     def test_post_extraction_review_links_local_label_without_fda_url(self) -> None:
@@ -242,7 +277,7 @@ class ReviewWorkflowTest(unittest.TestCase):
         }
         packet = build_stage_packet(
             "indication",
-            self.document,
+            self.proposal,
             self.indications,
             indication_index=0,
             artifact_paths=artifacts,
@@ -259,7 +294,7 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.dates[0]["llm_match"]["matched_after_quote"] = after
         packet = build_stage_packet(
             "approval",
-            self.document,
+            self.proposal,
             self.indications,
             indication_index=0,
             date_matches=self.dates,
@@ -274,30 +309,77 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.assertIn(after, markdown)
         self.assertIn("[selected changelog event](</tmp/changelog.md#event-1>)", markdown)
         self.assertNotIn("Label URL:", markdown)
+        self.assertIn(
+            "Proposed approval status: Approved (the indication text does not state "
+            "accelerated approval)",
+            markdown,
+        )
+        self.assertEqual(
+            packet["current_reviewed_approval"],
+            {"initial_approval_date": "2026-01-02", "status": "Approved"},
+        )
+
+    def test_approval_status_follows_reviewed_indication_text(self) -> None:
+        decisions = empty_decisions()
+        decisions["indications"]["0"] = {
+            "indication": {
+                "decision": "edited",
+                "overrides": {
+                    "indication": (
+                        "EXAMPLE is indicated for RET-positive NSCLC. This indication is "
+                        "approved under accelerated approval based on response rate."
+                    )
+                },
+            }
+        }
+        packet = build_stage_packet(
+            "approval",
+            self.proposal,
+            self.indications,
+            indication_index=0,
+            date_matches=self.dates,
+            decisions=decisions,
+        )
+        self.assertEqual(packet["current_reviewed_approval"]["status"], "Accelerated")
+        self.assertIn(
+            "Proposed approval status: Accelerated (the indication text states "
+            "accelerated approval)",
+            approval_markdown(packet),
+        )
 
     def test_revision_date_review_explains_current_form_and_baseline(self) -> None:
         packet = build_stage_packet(
             "approval",
-            self.document,
+            self.proposal,
             self.indications,
             indication_index=0,
             date_matches=self.dates,
             revision_baseline_date="2025-04-11",
         )
         markdown = approval_markdown(packet)
-        self.assertIn("label date and URL review", markdown)
+        self.assertIn("approval date and status review", markdown)
         self.assertIn("Proposed date current revised form first appeared", markdown)
         self.assertIn("Previous curated label date: 2025-04-11", markdown)
         self.assertNotIn("initial approval review", markdown)
 
     def test_revision_reviews_include_stage_specific_existing_record(self) -> None:
         existing = {
+            "id": "ind:fda:example:0",
             "indication": "Existing indication wording.",
-            "description": "Existing description wording.",
+            "statement_description": "Existing description wording.",
             "initial_approval_date": "2024-03-01",
-            "initial_approval_url": "https://example.test/existing.pdf",
+            "status": "Approved",
+            "contributions": [
+                {
+                    "id": "ctrb:fda:2024-03-01:0",
+                    "type": "Contribution",
+                    "agent_id": "agent:org:fda",
+                    "description": "Indication received traditional approval.",
+                    "date": "2024-03-01",
+                }
+            ],
             "raw_biomarkers": "RET fusion",
-            "raw_cancer_type": "lung cancer",
+            "raw_cancer_types": "lung cancer",
             "raw_therapeutics": "Example",
         }
         revision_targets = {
@@ -314,7 +396,7 @@ class ReviewWorkflowTest(unittest.TestCase):
         }
         revision_packet = build_stage_packet(
             "revision",
-            self.document,
+            self.proposal,
             self.indications,
             indication_index=0,
             revision_targets=revision_targets,
@@ -326,14 +408,14 @@ class ReviewWorkflowTest(unittest.TestCase):
         )
         indication_packet = build_stage_packet(
             "indication",
-            self.document,
+            self.proposal,
             self.indications,
             indication_index=0,
             revision_targets=revision_targets,
         )
         description_packet = build_stage_packet(
             "description",
-            self.document,
+            self.proposal,
             self.indications,
             indication_index=0,
             descriptions=self.descriptions,
@@ -341,7 +423,7 @@ class ReviewWorkflowTest(unittest.TestCase):
         )
         approval_packet = build_stage_packet(
             "approval",
-            self.document,
+            self.proposal,
             self.indications,
             indication_index=0,
             date_matches=self.dates,
@@ -359,10 +441,10 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.assertIn("Previous exact label wording.", screening_review)
         self.assertIn("Newer exact label wording.", screening_review)
         self.assertIn("`raw_biomarkers`: RET-positive", screening_review)
-        self.assertIn("`raw_cancer_type`: NSCLC", screening_review)
+        self.assertIn("`raw_cancer_types`: NSCLC", screening_review)
         self.assertIn("`raw_therapeutics`: Example (examplemab)", screening_review)
         self.assertIn("`raw_biomarkers`: RET fusion", screening_review)
-        self.assertIn("`raw_cancer_type`: lung cancer", screening_review)
+        self.assertIn("`raw_cancer_types`: lung cancer", screening_review)
         self.assertIn("`raw_therapeutics`: Example", screening_review)
         self.assertNotIn("Why this was flagged", indication_review)
         self.assertLess(
@@ -384,15 +466,19 @@ class ReviewWorkflowTest(unittest.TestCase):
         )
 
         description_review = description_markdown(description_packet)
-        self.assertIn("Existing MOAlmanac description", description_review)
+        self.assertIn("Existing MOAlmanac statement description", description_review)
         self.assertIn("Existing description wording.", description_review)
 
         approval_review = approval_markdown(approval_packet)
-        self.assertIn("Existing MOAlmanac date and URL", approval_review)
-        self.assertIn("2024-03-01", approval_review)
-        self.assertIn("https://example.test/existing.pdf", approval_review)
-        self.assertIn("meaningful enough to replace", approval_review)
-        self.assertIn("Keeping the existing approval provenance is valid", approval_review)
+        self.assertIn("Existing MOAlmanac approval", approval_review)
+        self.assertIn("- Initial approval date: 2024-03-01", approval_review)
+        self.assertIn("- Status: Approved", approval_review)
+        self.assertIn(
+            "FDA contribution 2024-03-01: Indication received traditional approval.",
+            approval_review,
+        )
+        self.assertIn("becomes a new record that replaces the existing one", approval_review)
+        self.assertIn("or the existing approval date", approval_review)
 
     def test_virtual_environment_status(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -425,7 +511,7 @@ class ReviewWorkflowTest(unittest.TestCase):
                 str(work_dir),
             ]
             with patch("sys.argv", argv), patch.object(
-                prepare_document, "curate_document", return_value=self.document
+                prepare_document, "curate_document", return_value=self.proposal
             ), patch.object(prepare_document.subprocess, "run") as run:
                 self.assertEqual(prepare_document.main(), 0)
 
@@ -503,7 +589,7 @@ class ReviewWorkflowTest(unittest.TestCase):
             work_dir = Path(temp_dir).resolve()
             document = work_dir / "intermediate" / "document.proposal.json"
             document.parent.mkdir(parents=True)
-            document.write_text(json.dumps(self.document), encoding="utf-8")
+            document.write_text(json.dumps(self.proposal), encoding="utf-8")
             argv = ["extract-indication-candidates", "--work-dir", str(work_dir)]
             with patch("sys.argv", argv), patch.object(
                 extract_candidates.subprocess, "run"
@@ -527,7 +613,7 @@ class ReviewWorkflowTest(unittest.TestCase):
             work_dir = Path(temp_dir).resolve()
             document = work_dir / "intermediate" / "document.proposal.json"
             document.parent.mkdir(parents=True)
-            document.write_text(json.dumps(self.document), encoding="utf-8")
+            document.write_text(json.dumps(self.proposal), encoding="utf-8")
             argv = [
                 "record-decision",
                 "--work-dir",
@@ -563,25 +649,304 @@ class ReviewWorkflowTest(unittest.TestCase):
                 "indication",
                 "edited",
                 0,
-                {"raw_cancer_type": "non-small cell lung cancer"},
+                {"raw_cancer_types": "non-small cell lung cancer"},
                 "Expanded NSCLC.",
                 sources,
             )
             record_decision(decisions, "description", "accepted", 0, {}, None, sources)
             record_decision(decisions, "approval", "accepted", 0, {}, None, sources)
-            reviewed_document, reviewed_indications = assemble_reviewed(
-                self.document,
+            assembled = assemble_reviewed(
+                self.proposal,
                 self.indications,
                 self.descriptions,
                 self.dates,
                 decisions,
+                self.database,
+                label_urls=self.label_urls,
+                contribution_date="2026-10-02",
             )
-            self.assertEqual(reviewed_document["id"], "doc:fda.example")
+            self.assertEqual(assembled["document"]["id"], "doc:fda:example")
             self.assertEqual(
-                reviewed_indications[0]["raw_cancer_type"],
+                assembled["indications"][0]["raw_cancer_types"],
                 "non-small cell lung cancer",
             )
             self.assertEqual(source.read_bytes(), original)
+
+    def accepted_decisions(self, *indexes: int) -> dict:
+        decisions = empty_decisions()
+        decisions["document"] = {"decision": "accepted", "source_sha256": {}}
+        for index in indexes:
+            decisions["indications"][str(index)] = {
+                stage: {"decision": "accepted", "overrides": {}, "source_sha256": {}}
+                for stage in ("indication", "description", "approval")
+            }
+        return decisions
+
+    def test_first_time_assembly_builds_database_records(self) -> None:
+        assembled = assemble_reviewed(
+            self.proposal,
+            self.indications,
+            self.descriptions,
+            self.dates,
+            self.accepted_decisions(0),
+            self.database,
+            label_urls=self.label_urls,
+            contribution_date="2026-10-02",
+        )
+        self.assertEqual(
+            assembled["urls"],
+            [
+                *self.proposal["urls"],
+                {"id": "url:fda:example:label:2026-01-02", "url": "https://example.test/initial.pdf"},
+            ],
+        )
+        dated = assembled["dated_documents"]
+        self.assertEqual([record["id"] for record in dated], ["doc:fda:example:2026-01-02"])
+        self.assertEqual(dated[0]["status"], "Deprecated")
+        self.assertEqual(dated[0]["publication_date"], "2026-01-02")
+        self.assertEqual(
+            dated[0]["urls"], ["url:fda:example:label:2026-01-02", "url:fda:example:overview"]
+        )
+        self.assertIn("https://example.test/initial.pdf. Revised January 2026.", dated[0]["description"])
+        self.assertEqual(
+            assembled["indications"],
+            [{
+                "id": "ind:fda:example:0",
+                "type": "Indication",
+                "description": self.indications["indications"][0]["indication"],
+                "contributions": [
+                    "ctrb:vanallenlab:2026-10-02:0",
+                    "ctrb:fda:2026-01-02:0",
+                ],
+                "reportedIn": ["doc:fda:example", "doc:fda:example:2026-01-02"],
+                "status": "Approved",
+                "statement_description": self.descriptions["indications"][0][
+                    "statement_description"
+                ],
+                "raw_biomarkers": "RET-positive",
+                "raw_cancer_types": "NSCLC",
+                "raw_therapeutics": "Example (examplemab)",
+                "superseded_by": [],
+            }],
+        )
+        self.assertEqual(
+            assembled["contributions"],
+            [
+                {
+                    "id": "ctrb:vanallenlab:2026-10-02:0",
+                    "type": "Contribution",
+                    "agent_id": "agent:user:vanallenlab",
+                    "description": "Initial curation of FDA's approval of Example (examplemab).",
+                    "date": "2026-10-02",
+                },
+                {
+                    "id": "ctrb:fda:2026-01-02:0",
+                    "type": "Contribution",
+                    "agent_id": "agent:org:fda",
+                    "description": "Indication received traditional approval.",
+                    "date": "2026-01-02",
+                },
+            ],
+        )
+
+    def test_matching_database_approval_contribution_is_reused(self) -> None:
+        self.dates[0]["verification"]["matched_event"]["date"] = "2020-01-01"
+        assembled = assemble_reviewed(
+            self.proposal,
+            self.indications,
+            self.descriptions,
+            self.dates,
+            self.accepted_decisions(0),
+            self.database,
+            label_urls=self.label_urls,
+            contribution_date="2026-10-02",
+        )
+        self.assertIn("ctrb:fda:2020-01-01:0", assembled["indications"][0]["contributions"])
+        self.assertEqual(
+            [record["agent_id"] for record in assembled["contributions"]],
+            ["agent:user:vanallenlab"],
+        )
+
+    def test_retained_indications_are_numbered_contiguously(self) -> None:
+        self.indications["indications"].append(
+            {**self.indications["indications"][0], "review_label": "Second RET use"}
+        )
+        self.descriptions["indications"].append(
+            {**self.descriptions["indications"][0], "indication_index": 2}
+        )
+        self.dates.append({**self.dates[0], "indication_index": 2})
+        decisions = self.accepted_decisions(2)
+        decisions["indications"]["0"] = {
+            "indication": {"decision": "excluded", "overrides": {}, "source_sha256": {}}
+        }
+        assembled = assemble_reviewed(
+            self.proposal,
+            self.indications,
+            self.descriptions,
+            self.dates,
+            decisions,
+            self.database,
+            label_urls=self.label_urls,
+            contribution_date="2026-10-02",
+        )
+        self.assertEqual(
+            [record["id"] for record in assembled["indications"]], ["ind:fda:example:0"]
+        )
+
+    def test_curator_approval_status_edit_sets_status_and_contribution(self) -> None:
+        decisions = self.accepted_decisions(0)
+        decisions["indications"]["0"]["approval"] = {
+            "decision": "edited",
+            "overrides": {"status": "Accelerated"},
+            "source_sha256": {},
+        }
+        assembled = assemble_reviewed(
+            self.proposal,
+            self.indications,
+            self.descriptions,
+            self.dates,
+            decisions,
+            self.database,
+            label_urls=self.label_urls,
+            contribution_date="2026-10-02",
+        )
+        self.assertEqual(assembled["indications"][0]["status"], "Accelerated")
+        self.assertEqual(
+            assembled["contributions"][-1]["description"],
+            "Indication received accelerated approval.",
+        )
+
+    def test_existing_document_id_is_rejected(self) -> None:
+        database = db_fixture.tables(
+            documents=[self.proposal["document"]], indications=[], urls=[]
+        )
+        with self.assertRaisesRegex(ValueError, "already contains IDs"):
+            assemble_reviewed(
+                self.proposal,
+                self.indications,
+                self.descriptions,
+                self.dates,
+                self.accepted_decisions(0),
+                database,
+                label_urls=self.label_urls,
+                contribution_date="2026-10-02",
+            )
+
+    def test_assemble_reviewed_cli_writes_schema_valid_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir).resolve()
+            database = db_fixture.write_database(
+                root / "moalmanac-db", documents=[], indications=[], urls=[]
+            )
+            work_dir = root / "run"
+            intermediate = work_dir / "intermediate"
+            review = work_dir / "review"
+            intermediate.mkdir(parents=True)
+            review.mkdir()
+            for name, payload in (
+                ("document.proposal.json", self.proposal),
+                ("Example-NDA123456-claude_chunked_indication_fields.json", self.indications),
+                ("selected-description-proposals.json", self.descriptions),
+                ("selected-approval-evidence.json", self.dates),
+            ):
+                (intermediate / name).write_text(json.dumps(payload), encoding="utf-8")
+            db_fixture.write_changelog(intermediate, self.label_urls)
+            (review / "decisions.json").write_text(
+                json.dumps(self.accepted_decisions(0)), encoding="utf-8"
+            )
+            argv = [
+                "assemble-reviewed",
+                "--work-dir", str(work_dir),
+                "--database-dir", str(database),
+                "--contribution-date", "2026-10-02",
+            ]
+            with patch("sys.argv", argv):
+                self.assertEqual(assembly_module.main(), 0)
+            reviewed = work_dir / "reviewed"
+            self.assertEqual(
+                json.loads((reviewed / "document.json").read_text())["id"],
+                "doc:fda:example",
+            )
+            self.assertEqual(
+                [
+                    record["id"]
+                    for record in json.loads((reviewed / "dated-documents.json").read_text())
+                ],
+                ["doc:fda:example:2026-01-02"],
+            )
+            self.assertEqual(len(json.loads((reviewed / "urls.json").read_text())), 3)
+            self.assertEqual(len(json.loads((reviewed / "indication.json").read_text())), 1)
+            self.assertEqual(
+                len(json.loads((reviewed / "contributions.json").read_text())), 2
+            )
+
+    def test_approval_date_needs_a_known_label(self) -> None:
+        decisions = self.accepted_decisions(0)
+        decisions["indications"]["0"]["approval"] = {
+            "decision": "edited",
+            "overrides": {"initial_approval_date": "2019-05-05"},
+            "source_sha256": {},
+        }
+        with self.assertRaisesRegex(ValueError, "No FDA label from 2019-05-05"):
+            assemble_reviewed(
+                self.proposal,
+                self.indications,
+                self.descriptions,
+                self.dates,
+                decisions,
+                self.database,
+                label_urls=self.label_urls,
+                contribution_date="2026-10-02",
+            )
+
+    def test_assemble_reviewed_cli_rejects_schema_violations(self) -> None:
+        self.indications["indications"][0]["raw_cancer_types"] = None
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir).resolve()
+            database = db_fixture.write_database(
+                root / "moalmanac-db", documents=[], indications=[], urls=[]
+            )
+            work_dir = root / "run"
+            intermediate = work_dir / "intermediate"
+            (work_dir / "review").mkdir(parents=True)
+            intermediate.mkdir()
+            for name, payload in (
+                ("document.proposal.json", self.proposal),
+                ("Example-NDA123456-claude_chunked_indication_fields.json", self.indications),
+                ("selected-description-proposals.json", self.descriptions),
+                ("selected-approval-evidence.json", self.dates),
+            ):
+                (intermediate / name).write_text(json.dumps(payload), encoding="utf-8")
+            db_fixture.write_changelog(intermediate, self.label_urls)
+            (work_dir / "review" / "decisions.json").write_text(
+                json.dumps(self.accepted_decisions(0)), encoding="utf-8"
+            )
+            argv = [
+                "assemble-reviewed",
+                "--work-dir", str(work_dir),
+                "--database-dir", str(database),
+            ]
+            with patch("sys.argv", argv), self.assertRaisesRegex(
+                ValueError, "raw_cancer_types"
+            ):
+                assembly_module.main()
+            self.assertFalse((work_dir / "reviewed").exists())
+
+    def test_approval_overrides_are_validated(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Approval status"):
+            record_decision(
+                empty_decisions(), "approval", "edited", 0, {"status": "Full"}, None, {}
+            )
+        with self.assertRaisesRegex(ValueError, "YYYY-MM-DD"):
+            record_decision(
+                empty_decisions(),
+                "approval",
+                "edited",
+                0,
+                {"initial_approval_date": "March 2024"},
+                None,
+                {},
+            )
 
     def test_missing_explicit_decision_is_rejected(self) -> None:
         decisions = empty_decisions()
@@ -591,11 +956,14 @@ class ReviewWorkflowTest(unittest.TestCase):
                 "indication": {"decision": "accepted", "source_sha256": {}}
             }
             assemble_reviewed(
-                self.document,
+                self.proposal,
                 self.indications,
                 self.descriptions,
                 self.dates,
                 decisions,
+                self.database,
+                label_urls=self.label_urls,
+                contribution_date="2026-10-02",
             )
 
     def test_meaningful_indication_edit_clears_downstream_decisions(self) -> None:

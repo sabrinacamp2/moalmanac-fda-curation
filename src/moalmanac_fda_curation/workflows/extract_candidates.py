@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from ..core.extract_indications_from_fda_label import DEFAULT_MAX_TOKENS, DEFAULT_MODEL, output_stem
-from ..core.artifacts import load_document_artifact, resolve_document_application_number
+from ..core.artifacts import load_document_proposal, resolve_document_application_number
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,9 +24,10 @@ def main() -> int:
     args = parse_args()
     work_dir = args.work_dir.resolve()
     document_path = work_dir / "intermediate" / "document.proposal.json"
-    document = load_document_artifact(document_path)
+    proposal = load_document_proposal(document_path)
     stem = output_stem(
-        document["drug_name_brand"], resolve_document_application_number(document)
+        proposal["document"]["drug_name_brand"],
+        resolve_document_application_number(proposal),
     )
     label_pdf = work_dir / "labels" / f"{stem}.pdf"
     label_markdown = work_dir / "labels" / f"{stem}.md"

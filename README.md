@@ -72,8 +72,23 @@ analyses/                     Revision notebook plus ignored local curation runs
 
 ## Current scope
 
-The reviewed workflows create new entries from FDA labels and update existing entries
-when a newer label changes their indications. The CLI checks whether an application was
+The reviewed workflows create new entries from FDA labels and suggest replacement entries
+when a newer label changes existing indications. The CLI checks whether an application was
 previously curated, identifies new and changed indications, records explicit curator
-decisions, and assembles reviewed JSON artifacts for the affected MOAlmanac records. The
-project does not write directly to `moalmanac-db`, commit, push, or open pull requests.
+decisions, and assembles reviewed JSON records for the affected `moalmanac-db` tables:
+documents, URLs, indications, and contributions. Assembly validates every record against
+the JSON schemas in your local `moalmanac-db` checkout. The project does not write
+directly to `moalmanac-db`, commit, push, or open pull requests.
+
+## Testing
+
+```shell
+python -m pytest
+```
+
+Set `MOALMANAC_DB_ROOT` to a local `moalmanac-db` checkout to also validate assembled
+records against that checkout's schemas:
+
+```shell
+MOALMANAC_DB_ROOT=../moalmanac-db python -m pytest tests/test_moalmanac_db_checkout.py
+```

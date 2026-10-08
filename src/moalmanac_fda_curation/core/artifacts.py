@@ -47,9 +47,17 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def load_document_artifact(path: Path) -> dict[str, Any]:
-    """Load and validate the document fields consumed by downstream scripts."""
-    document = load_json_object(path, "Document artifact")
+def load_document_proposal(path: Path) -> dict[str, Any]:
+    """Load a document proposal: one documents.json record plus its urls.json records."""
+    proposal = load_json_object(path, "Document proposal")
+    document = proposal.get("document")
+    urls = proposal.get("urls")
+    if not isinstance(document, dict) or not isinstance(urls, list) or not all(
+        isinstance(item, dict) for item in urls
+    ):
+        raise ValueError(
+            f"Document proposal at {path} must contain a document object and a urls list"
+        )
     required_fields = {
         "id": str,
         "drug_name_brand": str,
@@ -60,30 +68,36 @@ def load_document_artifact(path: Path) -> dict[str, Any]:
     for field, expected_type in required_fields.items():
         if not isinstance(document.get(field), expected_type):
             raise ValueError(
-                f"Document artifact at {path} must have {field!r} as "
+                f"Document proposal at {path} must have {field!r} as "
                 f"{expected_type.__name__}"
             )
     if not document["id"].startswith("doc:"):
-        raise ValueError(f"Document artifact at {path} has an invalid document ID")
-    return document
+        raise ValueError(f"Document proposal at {path} has an invalid document ID")
+    url_ids = {item.get("id") for item in urls}
+    missing = [ref for ref in document["urls"] if ref not in url_ids]
+    if missing:
+        raise ValueError(f"Document proposal at {path} cites undefined URLs: {missing}")
+    return proposal
 
 
-def document_label_url(document: dict[str, Any]) -> str:
-    """Return the first concrete HTTP(S) URL from a document artifact."""
+def proposal_label_url(proposal: dict[str, Any]) -> str:
+    """Return the FDA label PDF URL cited by a document proposal."""
+    document = proposal["document"]
     label_url = next(
         (
-            value
-            for value in document["urls"]
-            if isinstance(value, str)
-            and urlparse(value).scheme in {"http", "https"}
-            and urlparse(value).path.lower().endswith(".pdf")
+            item.get("url")
+            for item in proposal["urls"]
+            if item.get("id") in document["urls"]
+            and str(item.get("id")).endswith(":label")
         ),
         None,
     )
-    if label_url is None:
-        raise ValueError(
-            f"{document['id']} does not contain a concrete FDA label PDF URL"
-        )
+    if (
+        not isinstance(label_url, str)
+        or urlparse(label_url).scheme not in {"http", "https"}
+        or not urlparse(label_url).path.lower().endswith(".pdf")
+    ):
+        raise ValueError(f"{document['id']} does not cite a concrete FDA label PDF URL")
     return label_url
 
 
@@ -116,10 +130,10 @@ def record_label_urls(record: dict[str, Any]) -> list[str]:
     ]
 
 
-def resolve_document_application_number(document: dict[str, Any]) -> str:
-    """Resolve an NDA/BLA/ANDA application number from a document artifact."""
-    identification_number = f"{document['identification_number']:06d}"
-    label_url = document_label_url(document)
+def resolve_document_application_number(proposal: dict[str, Any]) -> str:
+    """Resolve an NDA/BLA/ANDA application number from a document proposal."""
+    identification_number = f"{proposal['document']['identification_number']:06d}"
+    label_url = proposal_label_url(proposal)
     matches: list[tuple[str, dict[str, Any]]] = []
 
     likely_bla = identification_number.startswith(("125", "761"))

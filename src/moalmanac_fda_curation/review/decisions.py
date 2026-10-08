@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core.artifacts import file_sha256, load_json_object, write_json_atomic
+from ..core.moalmanac_records import APPROVAL_STATUSES, ISO_DATE
 
 VALID_STAGES = {"document", "revision", "indication", "description", "approval"}
 VALID_DECISIONS = {"accepted", "edited", "excluded", "unresolved", "use_latest", "keep_existing"}
@@ -19,15 +20,15 @@ ALLOWED_OVERRIDES = {
     "indication": {
         "indication",
         "raw_biomarkers",
-        "raw_cancer_type",
+        "raw_cancer_types",
         "raw_therapeutics",
     },
-    "description": {"description"},
-    "approval": {"initial_approval_date", "initial_approval_url"},
+    "description": {"statement_description"},
+    "approval": {"initial_approval_date", "status"},
     "revision": {
         "indication",
         "raw_biomarkers",
-        "raw_cancer_type",
+        "raw_cancer_types",
         "raw_therapeutics",
     },
 }
@@ -100,6 +101,12 @@ def record_decision(
         raise ValueError(
             f"Unsupported {stage} override field(s): {sorted(unexpected_overrides)}"
         )
+    if stage == "approval":
+        date = overrides.get("initial_approval_date")
+        if date is not None and not (isinstance(date, str) and ISO_DATE.match(date)):
+            raise ValueError("initial_approval_date must use YYYY-MM-DD")
+        if "status" in overrides and overrides["status"] not in APPROVAL_STATUSES:
+            raise ValueError(f"Approval status must be one of {list(APPROVAL_STATUSES)}")
 
     entry = {
         "decision": decision,

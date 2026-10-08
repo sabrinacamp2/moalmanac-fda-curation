@@ -7,5 +7,7 @@ __pycache__/
 outputs/
 analyses/*
 !analyses/check-curation-preflight.ipynb
+!analyses/curate-new-indication-tool-only.ipynb
 !analyses/identify-new-indications.ipynb
 !analyses/revise-existing-indications.ipynb
+!analyses/revise-existing-indication-tool-only.ipynb
