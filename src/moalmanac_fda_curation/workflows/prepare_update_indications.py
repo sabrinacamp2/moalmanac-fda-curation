@@ -28,7 +28,11 @@ from ..core.identify_new_indications import (
     map_existing_to_latest_indications,
     select_new_indication_candidates,
 )
-from ..core.moalmanac_records import load_existing_indications, require_database
+from ..core.moalmanac_records import (
+    load_existing_indications,
+    load_table,
+    require_database,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,6 +46,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--include-non-biomarker", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
+
+
+def curated_document_names(database_dir: Path, document_id: str) -> dict[str, str]:
+    """Return the brand and generic names of the curated MOAlmanac document."""
+    document = next(
+        (
+            record
+            for record in load_table(database_dir, "documents")
+            if record.get("id") == document_id
+        ),
+        None,
+    )
+    if document is None:
+        raise ValueError(f"Curated document {document_id} was not found in documents.json")
+    return {
+        "brand": document["drug_name_brand"],
+        "generic": document["drug_name_generic"],
+    }
 
 
 def write_once(path: Path, payload: Any, *, overwrite: bool, name: str) -> None:
@@ -301,7 +323,10 @@ def main() -> int:
             company=None,
             label_url=preflight["latest_label_url"],
         )
-        proposal = curate_document(document_args)
+        proposal = curate_document(
+            document_args,
+            curated_names=curated_document_names(database_dir, preflight["document_id"]),
+        )
         write_json_atomic(document_path, proposal)
 
     stem = output_stem(

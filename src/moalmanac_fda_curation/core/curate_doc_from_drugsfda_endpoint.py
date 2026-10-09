@@ -169,21 +169,32 @@ def get_date_fields(label_fields: dict[str, Any], accessed_date: date) -> dict[s
 def get_drug_and_company_fields(
     fda_record: dict[str, Any],
     company_override: str | None = None,
+    curated_names: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """Prepare brand, generic, and company display fields."""
+    """Prepare brand, generic, and company display fields.
+
+    `curated_names` holds the `brand` and `generic` names of an existing MOAlmanac
+    document for the same application. They are used only when openFDA does not
+    report normalized names for the application.
+    """
     openfda = fda_record.get("openfda") or {}
-    if not openfda.get("brand_name") or not openfda.get("generic_name"):
+    if openfda.get("brand_name") and openfda.get("generic_name"):
+        brand = openfda["brand_name"][0].title()
+        generic = openfda["generic_name"][0].lower()
+    elif curated_names:
+        brand = curated_names["brand"]
+        generic = curated_names["generic"]
+    else:
         application_number = fda_record.get("application_number", "<unknown>")
         raise ValueError(
             f"drug/drugsfda record for {application_number} has no openfda "
             "brand_name/generic_name (openFDA's SPL-to-application linkage did "
-            "not populate for this record). This tool has no supported fallback "
-            "for deriving normalized brand/generic names from another field; "
-            "curate this application manually."
+            "not populate for this record), and no curated MOAlmanac document "
+            "supplies them. This tool has no supported fallback for deriving "
+            "normalized brand/generic names from another field; curate this "
+            "application manually."
         )
 
-    brand = openfda["brand_name"][0].title()
-    generic = openfda["generic_name"][0].lower()
     company = company_override or fda_record["sponsor_name"].title()
 
     return {
@@ -254,14 +265,17 @@ def build_document_proposal(
     }
 
 
-def curate_document(args: argparse.Namespace) -> dict[str, Any]:
+def curate_document(
+    args: argparse.Namespace,
+    curated_names: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Run each curation step and return the document proposal."""
     fda_record = fetch_fda_record(args.application_number)
 
     application_fields = get_application_identifiers(fda_record)
     label_fields = get_label_version_fields(fda_record, args.label_url)
     date_fields = get_date_fields(label_fields, args.accessed_date)
-    drug_fields = get_drug_and_company_fields(fda_record, args.company)
+    drug_fields = get_drug_and_company_fields(fda_record, args.company, curated_names)
     text_fields = get_formatted_text_fields(drug_fields, label_fields, date_fields)
 
     return build_document_proposal(

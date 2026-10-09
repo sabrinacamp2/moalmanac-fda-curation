@@ -37,6 +37,39 @@ class GetDrugAndCompanyFieldsTest(unittest.TestCase):
         self.assertIn("BLA761170", str(context.exception))
         self.assertIn("no supported fallback", str(context.exception))
 
+    def test_missing_openfda_uses_curated_names(self) -> None:
+        fda_record = {
+            "application_number": "NDA218197",
+            "sponsor_name": "ASTRAZENECA PHARMACEUTICALS LP",
+        }
+
+        fields = get_drug_and_company_fields(
+            fda_record,
+            curated_names={"brand": "Truqap", "generic": "capivasertib"},
+        )
+
+        self.assertEqual(fields["brand"], "Truqap")
+        self.assertEqual(fields["generic"], "capivasertib")
+        self.assertEqual(fields["company"], "Astrazeneca Pharmaceuticals Lp")
+
+    def test_openfda_names_take_precedence_over_curated_names(self) -> None:
+        fda_record = {
+            "application_number": "BLA125554",
+            "sponsor_name": "BRISTOL-MYERS SQUIBB CO",
+            "openfda": {
+                "brand_name": ["OPDIVO"],
+                "generic_name": ["NIVOLUMAB"],
+            },
+        }
+
+        fields = get_drug_and_company_fields(
+            fda_record,
+            curated_names={"brand": "Other", "generic": "othermab"},
+        )
+
+        self.assertEqual(fields["brand"], "Opdivo")
+        self.assertEqual(fields["generic"], "nivolumab")
+
     def test_openfda_missing_brand_name_raises_clear_error(self) -> None:
         fda_record = {
             "application_number": "BLA761170",

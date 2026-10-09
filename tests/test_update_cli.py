@@ -376,7 +376,7 @@ class UpdateCliTest(unittest.TestCase):
                 return_value=preflight,
             ), patch.object(
                 prepare_update_indications, "curate_document", return_value=proposal
-            ), patch.object(
+            ) as curate, patch.object(
                 prepare_update_indications.subprocess, "run", side_effect=extract
             ), patch.object(
                 prepare_update_indications,
@@ -389,6 +389,10 @@ class UpdateCliTest(unittest.TestCase):
             ):
                 self.assertEqual(prepare_update_indications.main(), 0)
 
+            self.assertEqual(
+                curate.call_args.kwargs["curated_names"],
+                {"brand": "Example", "generic": "examplemab"},
+            )
             review_dir = work_dir / "review" / "indication-matches"
             self.assertFalse(review_dir.exists())
             reconciliation_path = (
